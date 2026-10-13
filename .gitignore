@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 .env.*
+!.env.example
 # raw walk-through photos (people in shot) stay local
 reference/
 
@@ -15,3 +16,4 @@ data/private/
 # python
 .venv/
 __pycache__/
+

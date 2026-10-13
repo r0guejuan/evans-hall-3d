@@ -3,13 +3,17 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js'
 import { EYE, MAX_STEP, SPAWN, collide, floorAt, locate } from './layout.js'
+import { chat } from './chat.js'
 
 const CROUCH_EYE = 1.05
 const JUMP_SPEED = 4.2
 const GRAVITY = 12
 const LOOK_SPEED = 0.005 // radians per touch pixel
+const TURN_SPEED = 2.2 // radians per second with ← →
+const TILT_SPEED = 1.4 // radians per second with ↑ ↓
 
-// PC controls work like a shooter: WASD move, mouse look, Shift sprint, Space jump, C crouch.
+// PC controls: WASD move, arrow keys look (← → turn, ↑ ↓ tilt; the mouse works too), Shift sprint, C crouch.
+// Space is melee (see App.jsx), so jumping is touch-only; mouse look pauses while the weapon wheel is open.
 // Touch controls come in through touchRef: { active, move: [x, y], look: [dx, dy], jump }.
 export default function Player({ lockRef, mapRef, touchRef, onLock, onWhere }) {
   const { camera, gl } = useThree()
@@ -36,8 +40,9 @@ export default function Player({ lockRef, mapRef, touchRef, onLock, onWhere }) {
     controls.addEventListener('lock', on)
     controls.addEventListener('unlock', off)
     const down = (e) => {
+      if (e.target.closest?.('input, textarea')) return // typing in the chat, not walking
+      if (e.code === 'Space' || e.code === 'Tab' || e.code.startsWith('Arrow')) e.preventDefault() // no page scroll / focus hopping
       keys.current[e.code] = true
-      if (e.code === 'Space') e.preventDefault()
     }
     const up = (e) => (keys.current[e.code] = false)
     const blur = () => (keys.current = {})
@@ -56,6 +61,7 @@ export default function Player({ lockRef, mapRef, touchRef, onLock, onWhere }) {
 
   useFrame((_, rawDt) => {
     const dt = Math.min(rawDt, 0.05)
+    controls.enabled = !chat.get().wheelOpen // the mouse picks a weapon instead of turning your head
     // dev only: teleport for screenshots by setting <body data-go="[x, z, yawDeg]">
     if (import.meta.env.DEV && document.body.dataset.go) {
       const [x, z, yaw, pitch = 0, y = null] = JSON.parse(document.body.dataset.go)
@@ -83,12 +89,23 @@ export default function Player({ lockRef, mapRef, touchRef, onLock, onWhere }) {
     fwd.normalize()
 
     const k = keys.current
+    // arrow keys turn the camera
+    if (active && !chat.get().wheelOpen) {
+      const turn = (k.ArrowLeft ? 1 : 0) - (k.ArrowRight ? 1 : 0)
+      const tilt = (k.ArrowUp ? 1 : 0) - (k.ArrowDown ? 1 : 0)
+      if (turn || tilt) {
+        euler.setFromQuaternion(camera.quaternion)
+        euler.y += turn * TURN_SPEED * dt
+        euler.x = Math.max(-1.45, Math.min(1.45, euler.x + tilt * TILT_SPEED * dt))
+        camera.quaternion.setFromEuler(euler)
+      }
+    }
     let f = 0
     let s = 0
     let sprint = false
     if (active) {
-      f = (k.KeyW || k.ArrowUp ? 1 : 0) - (k.KeyS || k.ArrowDown ? 1 : 0)
-      s = (k.KeyD || k.ArrowRight ? 1 : 0) - (k.KeyA || k.ArrowLeft ? 1 : 0)
+      f = (k.KeyW ? 1 : 0) - (k.KeyS ? 1 : 0)
+      s = (k.KeyD ? 1 : 0) - (k.KeyA ? 1 : 0)
       sprint = k.ShiftLeft || k.ShiftRight
     }
     if (touch.active && (touch.move[0] || touch.move[1])) {
@@ -121,7 +138,7 @@ export default function Player({ lockRef, mapRef, touchRef, onLock, onWhere }) {
     }
 
     // jump + crouch
-    const wantJump = (active && k.Space) || touch.jump
+    const wantJump = touch.jump // the touch jump button (Space swings)
     touch.jump = false
     if (active && wantJump && jumpY.current === 0) vy.current = JUMP_SPEED
     vy.current -= GRAVITY * dt

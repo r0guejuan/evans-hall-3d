@@ -10,7 +10,7 @@ function canvas(w, h) {
 function tex(c, repeat) {
   const t = new THREE.CanvasTexture(c)
   t.colorSpace = THREE.SRGBColorSpace
-  t.anisotropy = 8
+  t.anisotropy = 16 // keeps floors crisp at grazing angles (clamped to what the GPU supports)
   if (repeat) {
     t.wrapS = t.wrapT = THREE.RepeatWrapping
     t.repeat.set(repeat[0], repeat[1])
@@ -18,133 +18,209 @@ function tex(c, repeat) {
   return t
 }
 
+// Photo-scanned PBR texture sets in public/textures/<name>/ (see public/textures/CREDITS.md).
+// Clones share the uploaded image, so the same set can tile at different scales for free.
+const loader = new THREE.TextureLoader()
+const sets = new Map()
+export function pbr(name, repeat = [1, 1]) {
+  if (!sets.has(name)) {
+    const base = `${import.meta.env.BASE_URL}textures/${name}/`
+    const load = (file, srgb) => {
+      const t = loader.load(base + file)
+      t.wrapS = t.wrapT = THREE.RepeatWrapping
+      t.anisotropy = 16
+      if (srgb) t.colorSpace = THREE.SRGBColorSpace
+      return t
+    }
+    sets.set(name, { map: load('Color.jpg', true), normalMap: load('NormalGL.jpg'), roughnessMap: load('Roughness.jpg') })
+  }
+  const out = {}
+  for (const [k, t] of Object.entries(sets.get(name))) {
+    out[k] = t.clone()
+    out[k].repeat.set(repeat[0], repeat[1])
+  }
+  return out
+}
+
 export function rng(seed) {
   let s = (seed * 2654435761) >>> 0 || 1
   return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296
 }
 
-// striped oatmeal carpet from the photos
-export function carpetTex(repeat = [0.25, 0.25], base = '#d6c9b3') {
-  const [c, g] = canvas(512, 512)
-  g.fillStyle = base
-  g.fillRect(0, 0, 512, 512)
-  const r = rng(7)
-  const cols = ['#c4b59c', '#e4d9c6', '#b7b2aa', '#cdbfa8', '#efe6d6']
-  for (let i = 0; i < 900; i++) {
-    g.fillStyle = cols[Math.floor(r() * cols.length)]
-    g.globalAlpha = 0.25 + r() * 0.4
-    g.fillRect(r() * 512, 0, 0.6 + r() * 1.6, 512)
+// per-pixel grain: breaks up flat fills so surfaces read as material instead of solid blocks
+function grain(g, w, h, amount, seed = 1) {
+  const img = g.getImageData(0, 0, w, h)
+  const d = img.data
+  const r = rng(seed)
+  for (let i = 0; i < d.length; i += 4) {
+    const n = (r() - 0.5) * amount
+    d[i] += n
+    d[i + 1] += n
+    d[i + 2] += n
   }
-  g.globalAlpha = 1
-  return tex(c, repeat)
+  g.putImageData(img, 0, 0)
+}
+
+// soft blotches of light and dark, like wear, lighting falloff, or plaster
+function mottle(g, w, h, count, size, alpha, seed) {
+  const r = rng(seed)
+  for (let i = 0; i < count; i++) {
+    const x = r() * w
+    const y = r() * h
+    const rad = size * (0.5 + r())
+    const grd = g.createRadialGradient(x, y, 0, x, y, rad)
+    const c = r() > 0.5 ? '255,255,255' : '0,0,0'
+    grd.addColorStop(0, `rgba(${c},${alpha})`)
+    grd.addColorStop(1, `rgba(${c},0)`)
+    g.fillStyle = grd
+    g.fillRect(x - rad, y - rad, rad * 2, rad * 2)
+  }
 }
 
 // glossy navy drum panels in horizontal bands
 export function drumTex() {
-  const [c, g] = canvas(512, 512)
-  const grd = g.createLinearGradient(0, 0, 0, 512)
+  const S = 1024
+  const [c, g] = canvas(S, S)
+  const grd = g.createLinearGradient(0, 0, 0, S)
   grd.addColorStop(0, '#0a1644')
   grd.addColorStop(0.5, '#132c78')
   grd.addColorStop(1, '#0a1540')
   g.fillStyle = grd
-  g.fillRect(0, 0, 512, 512)
+  g.fillRect(0, 0, S, S)
   g.fillStyle = 'rgba(0,0,0,0.55)'
-  for (let y = 0; y < 512; y += 128) g.fillRect(0, y, 512, 4)
+  for (let y = 0; y < S; y += 256) g.fillRect(0, y, S, 6)
   g.fillStyle = 'rgba(0,0,0,0.35)'
-  for (let x = 0; x < 512; x += 170) g.fillRect(x, 0, 2, 512)
-  g.fillStyle = 'rgba(160,190,255,0.08)'
-  for (let y = 0; y < 512; y += 128) g.fillRect(0, y + 8, 512, 40)
+  for (let x = 0; x < S; x += 340) g.fillRect(x, 0, 3, S)
+  // soft sheen on each panel
+  for (let y = 0; y < S; y += 256) {
+    const sh = g.createLinearGradient(0, y, 0, y + 256)
+    sh.addColorStop(0, 'rgba(160,190,255,0.14)')
+    sh.addColorStop(0.35, 'rgba(160,190,255,0.03)')
+    sh.addColorStop(1, 'rgba(0,0,0,0.12)')
+    g.fillStyle = sh
+    g.fillRect(0, y + 6, S, 250)
+  }
+  grain(g, S, S, 6, 4)
   return tex(c, [8, 1])
 }
 
+// teak slat wall: dark gaps between grained boards
 export function slatsTex() {
-  const [c, g] = canvas(128, 256)
-  for (let y = 0; y < 256; y += 16) {
-    g.fillStyle = '#2e1a0e'
-    g.fillRect(0, y, 128, 16)
-    g.fillStyle = y % 32 ? '#8d522a' : '#94592e'
-    g.fillRect(0, y + 2, 128, 11)
+  const [c, g] = canvas(256, 512)
+  const r = rng(13)
+  for (let y = 0; y < 512; y += 32) {
+    g.fillStyle = '#24140a'
+    g.fillRect(0, y, 256, 32)
+    g.fillStyle = y % 64 ? '#8d522a' : '#94592e'
+    g.fillRect(0, y + 4, 256, 23)
+    for (let k = 0; k < 10; k++) {
+      g.strokeStyle = r() > 0.5 ? 'rgba(60,30,10,0.3)' : 'rgba(230,160,100,0.18)'
+      g.lineWidth = 0.6 + r()
+      const yy = y + 5 + r() * 21
+      g.beginPath()
+      g.moveTo(0, yy)
+      g.bezierCurveTo(90, yy + r() * 3 - 1.5, 170, yy + r() * 3 - 1.5, 256, yy)
+      g.stroke()
+    }
+    // a soft highlight along the top edge of each board
+    g.fillStyle = 'rgba(255,220,180,0.12)'
+    g.fillRect(0, y + 4, 256, 2)
   }
+  grain(g, 256, 512, 14, 5)
   return tex(c)
 }
 
-export function teakTex() {
-  const [c, g] = canvas(256, 256)
-  g.fillStyle = '#b06c38'
-  g.fillRect(0, 0, 256, 256)
-  const r = rng(3)
-  for (let i = 0; i < 140; i++) {
-    g.strokeStyle = r() > 0.5 ? 'rgba(90,45,15,0.25)' : 'rgba(220,150,90,0.2)'
-    g.lineWidth = 1 + r() * 2
-    const y = r() * 256
-    g.beginPath()
-    g.moveTo(0, y)
-    g.bezierCurveTo(80, y + r() * 6 - 3, 170, y + r() * 6 - 3, 256, y)
-    g.stroke()
-  }
-  return tex(c)
-}
-
+// sage plaster walls with reveal lines
 export function sageTex() {
-  const [c, g] = canvas(256, 256)
+  const S = 512
+  const [c, g] = canvas(S, S)
   g.fillStyle = '#aeb08a'
-  g.fillRect(0, 0, 256, 256)
+  g.fillRect(0, 0, S, S)
+  mottle(g, S, S, 60, 70, 0.05, 17)
   g.fillStyle = 'rgba(40,45,30,0.55)'
-  for (const y of [70, 140, 210]) g.fillRect(0, y, 256, 3)
+  for (const y of [140, 280, 420]) g.fillRect(0, y, S, 5)
+  g.fillStyle = 'rgba(255,255,240,0.18)'
+  for (const y of [146, 286, 426]) g.fillRect(0, y, S, 2)
+  grain(g, S, S, 10, 8)
   return tex(c)
 }
 
 export function booksTex() {
-  const [c, g] = canvas(512, 256)
+  const [c, g] = canvas(1024, 512)
   g.fillStyle = '#5a3a20'
-  g.fillRect(0, 0, 512, 256)
+  g.fillRect(0, 0, 1024, 512)
   const r = rng(11)
   const cols = ['#7a1f2b', '#1f3b6b', '#2d5a3c', '#c9a227', '#e8e1d0', '#3b3b3b', '#8b5a2b', '#ff4fa3']
   for (let shelf = 0; shelf < 4; shelf++) {
-    let x = 4
-    const y0 = shelf * 64 + 6
-    while (x < 508) {
-      const w = 5 + r() * 9
-      const h = 40 + r() * 14
+    let x = 8
+    const y0 = shelf * 128 + 12
+    // shadow at the back of each shelf
+    g.fillStyle = '#24160b'
+    g.fillRect(0, y0 - 4, 1024, 112)
+    while (x < 1016) {
+      const w = 10 + r() * 18
+      const h = 80 + r() * 28
       g.fillStyle = cols[Math.floor(r() * cols.length)]
-      g.fillRect(x, y0 + (54 - h), w, h)
-      x += w + 1
+      g.fillRect(x, y0 + (108 - h), w, h)
+      // spine highlight + title band
+      g.fillStyle = 'rgba(255,255,255,0.14)'
+      g.fillRect(x + 1, y0 + (108 - h), 2, h)
+      g.fillStyle = 'rgba(0,0,0,0.25)'
+      g.fillRect(x, y0 + (108 - h) + h * 0.25, w, 4)
+      x += w + 1.5
     }
   }
+  grain(g, 1024, 512, 10, 12)
   return tex(c)
 }
 
 export function stoneTex(repeat) {
-  const [c, g] = canvas(512, 512)
+  const S = 1024
+  const [c, g] = canvas(S, S)
   g.fillStyle = '#d9ceb5'
-  g.fillRect(0, 0, 512, 512)
-  g.strokeStyle = 'rgba(90,80,60,0.45)'
-  g.lineWidth = 2
+  g.fillRect(0, 0, S, S)
+  // each stone slightly different in tone, with recessed grout
+  const r = rng(19)
   for (let row = 0; row < 16; row++) {
-    const y = row * 32
+    const y = row * 64
+    for (let x = (row % 2) * 96 - 96; x < S; x += 192) {
+      const v = Math.floor((r() - 0.5) * 26)
+      g.fillStyle = `rgb(${217 + v},${206 + v},${181 + v})`
+      g.fillRect(x + 2, y + 2, 188, 60)
+    }
+  }
+  mottle(g, S, S, 70, 60, 0.06, 23)
+  g.strokeStyle = 'rgba(90,80,60,0.55)'
+  g.lineWidth = 3
+  for (let row = 0; row < 16; row++) {
+    const y = row * 64
     g.beginPath()
     g.moveTo(0, y)
-    g.lineTo(512, y)
+    g.lineTo(S, y)
     g.stroke()
-    for (let x = (row % 2) * 48; x < 512; x += 96) {
+    for (let x = (row % 2) * 96; x < S; x += 192) {
       g.beginPath()
       g.moveTo(x, y)
-      g.lineTo(x, y + 32)
+      g.lineTo(x, y + 64)
       g.stroke()
     }
   }
+  grain(g, S, S, 18, 7)
   return tex(c, repeat)
 }
 
 export function lawnTex() {
-  const [c, g] = canvas(256, 256)
+  const S = 512
+  const [c, g] = canvas(S, S)
   g.fillStyle = '#34502a'
-  g.fillRect(0, 0, 256, 256)
+  g.fillRect(0, 0, S, S)
+  mottle(g, S, S, 50, 60, 0.08, 29)
   const r = rng(5)
-  for (let i = 0; i < 3000; i++) {
-    g.fillStyle = r() > 0.5 ? 'rgba(80,120,60,0.35)' : 'rgba(20,40,15,0.3)'
-    g.fillRect(r() * 256, r() * 256, 2, 2)
+  for (let i = 0; i < 16000; i++) {
+    g.fillStyle = r() > 0.5 ? 'rgba(90,135,65,0.4)' : 'rgba(20,40,15,0.35)'
+    g.fillRect(r() * S, r() * S, 1, 2 + r() * 3) // little blades
   }
+  grain(g, S, S, 14, 9)
   return tex(c, [0.15, 0.15])
 }
 
@@ -270,17 +346,6 @@ export function windowsTex(warm = true) {
     }
   g.globalAlpha = 1
   return tex(c, [1, 1])
-}
-
-export function skyTex() {
-  const [c, g] = canvas(16, 512)
-  const grd = g.createLinearGradient(0, 0, 0, 512)
-  grd.addColorStop(0, '#1d3a8a')
-  grd.addColorStop(0.55, '#5f83d6')
-  grd.addColorStop(1, '#c9b9d8')
-  g.fillStyle = grd
-  g.fillRect(0, 0, 16, 512)
-  return tex(c)
 }
 
 // made-up stairwell paintings in the spirit of the Stair G portrait

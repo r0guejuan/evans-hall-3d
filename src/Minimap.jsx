@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { BEIN, BOUNDS, COURTYARD, DRUMS, LIBRARY, MEETING, STAIRS, arc } from './layout.js'
 import { DAN } from './HandsomeDan.jsx'
+import { COFFEE } from './Rivals.jsx'
 
 const PAD = 3
 const X0 = BOUNDS.xMin - PAD
@@ -84,6 +85,12 @@ export default function Minimap({ drawRef }) {
     const g = ref.current.getContext('2d')
     drawRef.current = (x, z, fx, fz) => {
       g.drawImage(bg, 0, 0)
+      // the coffee & snack table (healing)
+      const [kx, ky] = px(COFFEE.x, COFFEE.z)
+      g.font = '12px system-ui'
+      g.textAlign = 'center'
+      g.textBaseline = 'middle'
+      g.fillText('☕', kx, ky)
       // Handsome Dan
       const [dx, dy] = px(DAN.x, DAN.z)
       g.fillStyle = '#4a90ff'

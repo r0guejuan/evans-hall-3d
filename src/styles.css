@@ -249,3 +249,847 @@ body,
     font-size: 38px;
   }
 }
+
+/* ---------- talking to professors */
+.crosshair.on {
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  background: transparent;
+  border: 2px solid var(--pink);
+  box-shadow: 0 0 12px var(--pink);
+}
+
+.talkhint {
+  position: fixed;
+  left: 50%;
+  top: calc(50% + 28px);
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  background: rgba(11, 11, 13, 0.85);
+  border: 1px solid var(--pink);
+  border-radius: 999px;
+  color: var(--pink-soft);
+  font-size: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.talkhint b {
+  color: var(--pink);
+}
+
+.talkhint.tap {
+  pointer-events: auto;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 12px 18px;
+  cursor: pointer;
+}
+
+.chat {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  width: min(400px, calc(100vw - 32px));
+  height: min(580px, calc(100vh - 88px));
+  display: flex;
+  flex-direction: column;
+  background: rgba(11, 11, 13, 0.94);
+  border: 2px solid var(--pink);
+  border-radius: 18px;
+  box-shadow: 0 0 40px rgba(255, 79, 163, 0.35);
+  color: #fff;
+  z-index: 20;
+  overflow: hidden;
+}
+
+.chat-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid rgba(255, 79, 163, 0.35);
+}
+
+.chat-head .kicker {
+  font-size: 11px;
+}
+
+.chat-head h2 {
+  margin: 4px 0 0;
+  font-family: Georgia, serif;
+  font-size: 22px;
+}
+
+.chat-close {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--pink);
+  background: transparent;
+  color: var(--pink);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.chat-close:hover,
+.chat-close:focus-visible {
+  background: var(--pink);
+  color: var(--black);
+}
+
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bubble {
+  max-width: 85%;
+  padding: 10px 13px;
+  border-radius: 14px;
+  line-height: 1.45;
+  font-size: 14.5px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.bubble.prof {
+  align-self: flex-start;
+  background: #1c1a1f;
+  border: 1px solid rgba(255, 79, 163, 0.3);
+  border-bottom-left-radius: 4px;
+}
+
+.bubble.you {
+  align-self: flex-end;
+  background: var(--pink);
+  color: var(--black);
+  border-bottom-right-radius: 4px;
+}
+
+.bubble.typing {
+  display: flex;
+  gap: 5px;
+  padding: 14px;
+}
+
+.bubble.typing span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--pink);
+  animation: blink 1.2s infinite ease-in-out;
+}
+
+.bubble.typing span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.bubble.typing span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes blink {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+
+.chat-error {
+  align-self: stretch;
+  padding: 10px 12px;
+  border: 1px solid #ff6b6b;
+  border-radius: 12px;
+  color: #ffd0d0;
+  font-size: 13.5px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.chat-error button {
+  flex: none;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--pink);
+  background: transparent;
+  color: var(--pink);
+  cursor: pointer;
+}
+
+.chat-input {
+  display: flex;
+  gap: 8px;
+  padding: 12px 12px 6px;
+  border-top: 1px solid rgba(255, 79, 163, 0.35);
+}
+
+.chat-input textarea {
+  flex: 1;
+  resize: none;
+  min-height: 44px;
+  max-height: 120px;
+  padding: 11px 12px;
+  border-radius: 12px;
+  border: 1px solid #3a3740;
+  background: #141216;
+  color: #fff;
+  font: inherit;
+  font-size: 15px;
+}
+
+.chat-input textarea:focus {
+  outline: none;
+  border-color: var(--pink);
+}
+
+.chat-input .go {
+  width: auto;
+  padding: 0 18px;
+}
+
+.chat-input .go:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.chat-tip {
+  padding: 0 14px 10px;
+  color: #8d8a94;
+  font-size: 11.5px;
+}
+
+@media (max-width: 600px) {
+  .chat {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    width: auto;
+    height: min(70vh, calc(100vh - 80px));
+  }
+
+  .chat-tip {
+    display: none;
+  }
+}
+
+
+@keyframes pop {
+  from {
+    transform: translateX(-50%) scale(0.8);
+    opacity: 0;
+  }
+}
+
+/* ---------- the Handsome Dan pat game */
+
+
+
+.rules {
+  margin: -6px 0 18px;
+  padding: 10px 12px;
+  border: 1px dashed rgba(255, 79, 163, 0.6);
+  border-radius: 10px;
+  color: #e6e6ea;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.rules b {
+  color: var(--pink);
+}
+
+.overlay.boom {
+  cursor: default;
+  background: radial-gradient(circle at center, rgba(255, 120, 30, 0.45), rgba(11, 11, 13, 0.85) 70%);
+  z-index: 30;
+}
+
+.overlay.boom h1 {
+  color: #ffb347;
+}
+
+.final {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 20px;
+}
+
+.final div {
+  flex: 1;
+  padding: 10px 6px;
+  border: 1px solid rgba(255, 79, 163, 0.4);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.final b {
+  display: block;
+  font-size: 26px;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.final span {
+  color: #bdbdc4;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+
+
+
+
+
+
+
+
+
+/* ---------- rivals: the fight HUD */
+.rivalshud {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 16px;
+  background: rgba(11, 11, 13, 0.85);
+  border: 1px solid #c8102e;
+  border-radius: 999px;
+  color: #ffd6d6;
+  font-size: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.rivalshud b {
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.hpbar {
+  display: inline-block;
+  width: 110px;
+  height: 10px;
+  border-radius: 999px;
+  background: #3a1a1e;
+  overflow: hidden;
+}
+
+.hpbar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #ff4fa3, #ff8ac4);
+  transition: width 0.2s;
+}
+
+/* the Labubu heist countdown: dripping, blood-red, pulsing faster in the last ten seconds */
+.labubuclock {
+  position: fixed;
+  top: 196px; /* under the event banner */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  pointer-events: none;
+  text-align: center;
+  color: #c3000f;
+  font-family: 'Creepster', 'Chiller', Georgia, serif;
+  text-shadow: 0 0 6px #000, 0 2px 0 #4a0006, 0 0 18px rgba(200, 0, 20, 0.7);
+  animation: bloodpulse 1s ease-in-out infinite;
+}
+.labubuclock small {
+  display: block;
+  font-size: 22px;
+  letter-spacing: 1px;
+}
+.labubuclock b {
+  display: block;
+  font-size: 76px;
+  line-height: 1;
+  font-weight: normal;
+}
+.labubuclock.final {
+  color: #ff0a1e;
+  animation-duration: 0.45s;
+}
+@keyframes bloodpulse {
+  50% {
+    transform: translateX(-50%) scale(1.06);
+  }
+}
+@media (max-width: 600px) {
+  .labubuclock small {
+    font-size: 15px;
+  }
+  .labubuclock b {
+    font-size: 52px;
+  }
+}
+.hurt {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at center, rgba(200, 16, 46, 0) 45%, rgba(200, 16, 46, 0.9) 100%);
+  z-index: 3;
+}
+
+.rivalsbanner {
+  position: fixed;
+  left: 50%;
+  top: 112px;
+  transform: translateX(-50%);
+  padding: 10px 18px;
+  background: #c8102e;
+  color: #fff;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 15px;
+  max-width: calc(100vw - 32px);
+  text-align: center;
+  box-shadow: 0 0 24px rgba(200, 16, 46, 0.5);
+  pointer-events: none;
+  z-index: 7;
+  animation: pop 0.25s ease-out;
+}
+
+.crosshair.on.danger {
+  border-color: #ff3b3b;
+  box-shadow: 0 0 12px #ff3b3b;
+}
+
+.talkhint.danger {
+  border-color: #ff3b3b;
+}
+
+.talkhint.danger b {
+  color: #ff6b6b;
+}
+
+@media (max-width: 600px) {
+  .rivalshud {
+    bottom: 44px;
+    gap: 10px;
+    font-size: 13px;
+  }
+
+  .hpbar {
+    width: 70px;
+  }
+
+  .rivalsbanner {
+    top: 146px;
+  }
+}
+
+/* ---------- rivals: power-ups in chat, study notes, Dan + buffs */
+.bubble.power {
+  align-self: stretch;
+  max-width: none;
+  background: linear-gradient(90deg, rgba(255, 79, 163, 0.25), rgba(255, 201, 58, 0.2));
+  border: 1px solid #ffc93a;
+  color: #fff;
+  font-weight: 600;
+}
+
+.powerask {
+  margin: 0 12px 0;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px dashed #ffc93a;
+  background: transparent;
+  color: #ffd76a;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.powerask:hover,
+.powerask:focus-visible {
+  background: rgba(255, 201, 58, 0.12);
+}
+
+.powerask:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.rivalshud {
+  flex-direction: column;
+  gap: 6px;
+  border-radius: 16px;
+}
+
+.rivalshud .row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.rivalshud .row.small {
+  font-size: 12.5px;
+  gap: 10px;
+}
+
+.rivalshud .alert {
+  color: #ff8a8a;
+  font-weight: 700;
+}
+
+.rivalshud .spell {
+  pointer-events: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #ff4fa3;
+  background: rgba(255, 79, 163, 0.18);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.rivalshud kbd {
+  font-size: 10px;
+  padding: 0 4px;
+  border: 1px solid #ffd6ea;
+  border-radius: 4px;
+}
+
+.hpbar {
+  position: relative;
+}
+
+.hpbar .shield {
+  position: absolute;
+  left: 0;
+  top: 0;
+  background: linear-gradient(90deg, #4aa3ff, #a9d4ff);
+  opacity: 0.85;
+}
+
+.notecard-wrap {
+  cursor: default;
+}
+
+.notecard {
+  max-width: 420px;
+  margin: 16px;
+  padding: 26px;
+  background: #fff7df;
+  color: #1d2433;
+  border: 3px solid var(--pink);
+  border-radius: 14px;
+  box-shadow: 0 0 40px rgba(255, 79, 163, 0.4);
+}
+
+.notecard .kicker {
+  color: #c8102e;
+}
+
+.notecard p {
+  font-family: Georgia, serif;
+  font-size: 18px;
+  line-height: 1.5;
+  margin: 12px 0;
+}
+
+.notecard .from {
+  color: #6b7280;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+/* ---------- rivals: arsenal, shop, crash */
+.rivalshud .loadout .slot {
+  padding: 1px 7px;
+  border: 1px solid #3a3740;
+  border-radius: 999px;
+}
+
+.rivalshud .loadout .slot.on {
+  border-color: var(--pink);
+}
+
+.rivalshud .cash {
+  color: #ffd76a;
+  font-weight: 700;
+}
+
+.rivalshud .mute {
+  pointer-events: auto;
+  background: none;
+  border: 0;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.rivalshud .intermission {
+  color: #b9f5c6;
+}
+
+.crashticker {
+  position: fixed;
+  top: 64px;
+  left: 0;
+  right: 0;
+  padding: 6px 0;
+  background: rgba(120, 0, 10, 0.82);
+  color: #ffd0d0;
+  font: 700 14px ui-monospace, Menlo, monospace;
+  letter-spacing: 0.1em;
+  text-align: center;
+  pointer-events: none;
+  z-index: 6;
+  animation: tick 0.8s steps(2) infinite;
+}
+
+@keyframes tick {
+  50% {
+    color: #ff6b6b;
+  }
+}
+
+.actionpad {
+  position: fixed;
+  right: 16px;
+  bottom: 220px;
+  display: grid;
+  grid-template-columns: repeat(2, 58px);
+  gap: 10px;
+  z-index: 6;
+}
+
+.actionpad button {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  border: 2px solid var(--pink);
+  background: rgba(11, 11, 13, 0.75);
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.card.shop {
+  max-width: 640px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+}
+
+.card.shop h2 {
+  margin: 6px 0 4px;
+  color: #ffd76a;
+  font-size: 30px;
+}
+
+.shopgrid {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.shopgrid .item {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid #3a3740;
+  border-radius: 12px;
+}
+
+.shopgrid .item.owned {
+  border-color: #3d6b4a;
+  background: rgba(61, 107, 74, 0.15);
+}
+
+.shopgrid .icon {
+  font-size: 30px;
+  text-align: center;
+}
+
+.shopgrid b {
+  display: block;
+}
+
+.shopgrid small {
+  color: var(--pink);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.shopgrid p {
+  margin: 3px 0 0;
+  color: #bdbdc4;
+  font-size: 13px;
+}
+
+.shopgrid .go {
+  width: auto;
+  padding: 10px 14px;
+  white-space: nowrap;
+}
+
+.shopgrid .go:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.shopfoot {
+  display: flex;
+  gap: 10px;
+}
+
+.shopfoot .go {
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  .shopgrid .item {
+    grid-template-columns: 36px 1fr;
+  }
+
+  .shopgrid .go {
+    grid-column: 1 / -1;
+  }
+
+  .actionpad {
+    bottom: 200px;
+  }
+}
+
+/* ---------- rivals: weapon wheel */
+.wheel {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at center, rgba(11, 11, 13, 0.55), rgba(11, 11, 13, 0.85) 60%);
+  z-index: 25;
+}
+
+.wheel-ring {
+  position: relative;
+  width: 0;
+  height: 0;
+}
+
+.wheel .slice,
+.wheel .hub {
+  position: absolute;
+  left: 0;
+  top: 0;
+  translate: -50% -50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  border-radius: 50%;
+  font: inherit;
+  cursor: pointer;
+}
+
+.wheel .slice {
+  width: 104px;
+  height: 104px;
+  background: rgba(20, 18, 24, 0.92);
+  border: 2px solid #3a3740;
+  color: #fff;
+  transition: transform 0.08s, border-color 0.08s, box-shadow 0.08s;
+}
+
+.wheel .slice.melee {
+  border-style: dashed;
+}
+
+.wheel .slice.on {
+  border-color: #ffd76a;
+}
+
+.wheel .slice.sel {
+  border-color: var(--pink);
+  box-shadow: 0 0 22px rgba(255, 79, 163, 0.6);
+  background: rgba(60, 20, 45, 0.95);
+}
+
+.wheel .slice.locked {
+  opacity: 0.45;
+}
+
+.wheel .ico {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.wheel .nm {
+  max-width: 92px;
+  font-size: 11px;
+  line-height: 1.15;
+  text-align: center;
+}
+
+.wheel .ct {
+  color: #ffd76a;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.wheel .hub {
+  width: 150px;
+  height: 150px;
+  padding: 14px;
+  background: rgba(11, 11, 13, 0.9);
+  border: 2px solid var(--pink);
+  color: #fff;
+  text-align: center;
+}
+
+.wheel .hub b {
+  font-size: 14px;
+}
+
+.wheel .hub small {
+  color: #bdbdc4;
+  font-size: 11px;
+}
+
+@media (max-width: 600px) {
+  .wheel .slice {
+    width: 84px;
+    height: 84px;
+  }
+
+  .wheel .hub {
+    width: 120px;
+    height: 120px;
+  }
+}
+
+/* ---------- the title */
+.card h1.title {
+  font-size: 40px;
+  line-height: 1.05;
+  color: #e8475e;
+  text-shadow: 0 0 18px rgba(200, 16, 46, 0.55);
+}

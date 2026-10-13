@@ -67,12 +67,12 @@ const TIER_SPAN = 1.42 // radians each side of the center aisle covered by riser
 const bandStart = (i) => ROW0 - 0.35 + i * ROW_STEP
 const SLIDE_ORDER = ['title', 'chart', 'content']
 export const DRUMS = [
-  { id: '2400', course: 'mgt409', name: 'MBA Class of 1980 Classroom', c: [-31, 28.4], rx: 8, rz: 8, front: [1, -1] },
+  { id: '2400', course: 'mgt402', name: 'MBA Class of 1980 Classroom', c: [-31, 28.4], rx: 8, rz: 8, front: [1, -1] },
   { id: '2410', course: 'mgt404', name: 'Bewkes Classroom', c: [-14.5, 31.4], rx: 6, rz: 6.5, front: [0, -1] },
   { id: '2420', course: 'mgt403', name: 'Betts Classroom', c: [0, 31.4], rx: 6, rz: 6.5, front: [0, -1] },
   { id: '2430', course: 'mgt887', name: 'Baker Classroom', c: [14.5, 31.4], rx: 6, rz: 6.5, front: [0, -1] },
-  { id: '2200', course: 'mgt402', name: 'Blumetti Classroom', c: [-31, -28.4], rx: 7.5, rz: 7.5, front: [1, 1] },
-  { id: '2210', course: 'mgt538', name: 'Allison Foundation Classroom', c: [-14.5, -31.4], rx: 6, rz: 6.5, front: [0, 1] },
+  { id: '2200', course: 'mgt409', name: 'Blumetti Classroom', c: [-31, -28.4], rx: 7.5, rz: 7.5, front: [1, 1] },
+  { id: '2210', course: 'mgt407', name: 'Allison Foundation Classroom', c: [-14.5, -31.4], rx: 6, rz: 6.5, front: [0, 1] },
   { id: '2220', course: 'mgt800', name: 'Jones Classroom', c: [0, -31.4], rx: 6, rz: 6.5, front: [0, 1] },
   { id: '2230', course: 'mgt541', name: 'Nooyi Classroom', c: [14.5, -31.4], rx: 6, rz: 6.5, front: [0, 1] },
 ].map((d) => {
@@ -295,8 +295,8 @@ export const COLLIDERS = WALLS.filter((w) => w.collide).map((w) => ({
   maxz: Math.max(w.a[1], w.b[1]),
 }))
 
-export function collide(pos) {
-  for (let it = 0; it < 3; it++) {
+export function collide(pos, iterations = 3) {
+  for (let it = 0; it < iterations; it++) {
     for (const s of COLLIDERS) {
       const rr = R_PLAYER + s.t / 2
       if (pos.x < s.minx - rr || pos.x > s.maxx + rr || pos.z < s.minz - rr || pos.z > s.maxz + rr) continue

@@ -3,14 +3,15 @@ import * as THREE from 'three'
 // Lecture slides drawn on canvas, one deck per course (Yale SOM Fall 2026 MBA courses).
 // kind: 'title' | 'chart' | 'content'
 export const COURSES = {
-  mgt409: { code: 'MGT 409', name: 'AI Foundations for Managers', prof: 'Albus Dumbledore' },
-  mgt404: { code: 'MGT 404', name: 'Basics of Economics', prof: 'Minerva McGonagall' },
-  mgt403: { code: 'MGT 403', name: 'Probability Modeling & Statistics', prof: 'Sybill Trelawney' },
-  mgt887: { code: 'MGT 887', name: 'Negotiations', prof: 'Horace Slughorn' },
-  mgt402: { code: 'MGT 402', name: 'Basics of Accounting', prof: 'Severus Snape' },
-  mgt538: { code: 'MGT 538', name: 'Mastering Influence & Persuasion', prof: 'Gilderoy Lockhart' },
-  mgt800: { code: 'MGT 800', name: 'Crisis Management in Tech', prof: 'Alastor Moody' },
-  mgt541: { code: 'MGT 541', name: 'Corporate Finance', prof: 'Filius Flitwick' },
+  mgt409: { code: 'MGT 409', name: 'AI Foundations for Managers', prof: 'Tauhid Zaman' },
+  mgt404: { code: 'MGT 404', name: 'Basics of Economics' },
+  mgt403: { code: 'MGT 403', name: 'Probability Modeling & Statistics' },
+  mgt887: { code: 'MGT 887', name: 'Negotiations' },
+  mgt402: { code: 'MGT 402', name: 'Basics of Accounting' },
+  mgt538: { code: 'MGT 538', name: 'Mastering Influence & Persuasion' },
+  mgt800: { code: 'MGT 800', name: 'Crisis Management in Tech' },
+  mgt541: { code: 'MGT 541', name: 'Corporate Finance' },
+  mgt407: { code: 'MGT 407', name: 'Statistics (EMBA)', prof: 'Peter Schott' },
 }
 export const COURSE_KEYS = Object.keys(COURSES)
 export const SLIDE_KINDS = ['title', 'chart', 'content']
@@ -61,6 +62,11 @@ const DECKS = {
     title: ['Valuation by DCF', 'A dollar today beats a dollar tomorrow'],
     content: ['NPV and the cost of capital', ['NPV = Σ CFₜ / (1 + r)ᵗ − I₀', 'Take projects with NPV > 0', 'r = WACC, set by risk, not by hope', 'Terminal value often dominates — check it']],
     chart: 'dcf',
+  },
+  mgt407: {
+    title: ['Regression in Plain English', 'Say what the number means, not what it’s called'],
+    content: ['Stats speak → plain English', ['β = 2.1 → "each extra unit adds about 2.1"', 'p < 0.05 → "unlikely to be pure luck"', '95% CI → "our best range for the truth"', 'Problem Set 1: questions 1–47 (fun!)']],
+    chart: 'regression',
   },
 }
 
@@ -197,6 +203,26 @@ function drawChart(g, which) {
       g.font = '30px Georgia, serif'
       g.fillText(lab, x - g.measureText(lab).width / 2, 470)
     })
+  } else if (which === 'regression') {
+    axes()
+    const line = (x) => oy - 60 - (x - ox) * 0.36
+    let seed = 7
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647 - 0.5) * 2
+    g.fillStyle = '#8aa4c8'
+    for (let i = 0; i < 28; i++) {
+      const x = ox + 40 + i * 33
+      g.beginPath()
+      g.arc(x, line(x) + rnd() * 70, 9, 0, Math.PI * 2)
+      g.fill()
+    }
+    g.strokeStyle = PINK
+    g.lineWidth = 7
+    g.beginPath()
+    g.moveTo(ox + 20, line(ox + 20))
+    g.lineTo(1130, line(1130))
+    g.stroke()
+    g.fillStyle = INK
+    g.fillText('ŷ = a + b·x   "more x, more y, about b each"', ox + 20, 200)
   } else if (which === 'dcf') {
     axes()
     for (let i = 0; i < 6; i++) {
@@ -252,7 +278,7 @@ export function slideTex(course, kind) {
     g.fillText(deck.title[1], 80, 410)
     g.font = 'italic 34px Georgia, serif'
     g.fillStyle = '#c9d6ea'
-    g.fillText(`Prof. ${info.prof} · Yale SOM · Fall 2026`, 80, 620)
+    g.fillText(`${info.prof ? `Prof. ${info.prof} · ` : ''}Yale SOM · Fall 2026`, 80, 620)
   } else if (kind === 'content') {
     frame(g, course, deck.content[0])
     g.fillStyle = INK

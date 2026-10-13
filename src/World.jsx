@@ -1,17 +1,19 @@
-import { useLayoutEffect, useMemo, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js'
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import {
   H, EAST, BOUNDS, COURTYARD, DRUMS, DRUM_WALL, WALLS, CHAIRS, SCREENS, BOARDS, LECTERNS,
   STAIRS, MEETING, MEET_DOOR, BEIN, BEIN_TABLES, PLANTS, LIBRARY, RISE, inPoly, ellPt, tierOutline,
 } from './layout.js'
 import * as T from './textures.js'
-import LabubuParty, { MeetingLabubus } from './LabubuParty.jsx'
-import LabubuCrowd from './LabubuCrowd.jsx'
 import Faculty from './Faculty.jsx'
 import HandsomeDan from './HandsomeDan.jsx'
 import { COURSE_KEYS, slideTex } from './slides.js'
+import { PottedPlants, Trees } from './Nature.jsx'
+import Rivals from './Rivals.jsx'
 import { rng } from './textures.js'
 
 const TAU = Math.PI * 2
@@ -40,6 +42,8 @@ function Instanced({ items, material, geometry }) {
 }
 
 const BOX = new THREE.BoxGeometry(1, 1, 1)
+// furniture gets softened edges: perfectly sharp 90° corners are a big part of the "Minecraft" look
+const ROUNDED = new RoundedBoxGeometry(1, 1, 1, 3, 0.06)
 const slideMats = new Map()
 const slideMat = (course, kind) => {
   const k = `${course}-${kind}`
@@ -100,34 +104,36 @@ function Plane({ p, rot = 0, w, h, material }) {
 function useMaterials() {
   return useMemo(() => {
     const std = (o) => new THREE.MeshStandardMaterial(o)
+    // the texture doubles as its own bump map: grout, weave and grain catch the light
+    const bumpy = (map, bumpScale, o) => std({ map, bumpMap: map, bumpScale, ...o })
     const glass = (color, opacity) =>
       std({ color, transparent: true, opacity, roughness: 0.05, metalness: 0.2, side: THREE.DoubleSide, depthWrite: false })
     return {
       white: std({ color: '#f2f0ec', roughness: 0.9 }),
-      sage: std({ map: T.sageTex(), roughness: 0.9 }),
+      sage: bumpy(T.sageTex(), 0.6, { roughness: 0.9 }),
       exterior: glass('#2a3a55', 0.35),
       glass: glass('#d7ecf2', 0.14),
       libGlass: glass('#d7ecf2', 0.12),
       beinGlass: glass('#d7ecf2', 0.12),
       meetGlass: glass('#c9d6e6', 0.22),
       rail: glass('#9fb3c8', 0.3),
-      slats: std({ map: T.slatsTex(), roughness: 0.7 }),
-      desk: std({ map: T.teakTex(), roughness: 0.55 }),
+      slats: bumpy(T.slatsTex(), 2, { roughness: 0.6 }),
+      desk: std({ ...T.pbr('wood'), roughness: 0.9 }), // roughness map does the work
       shelf: std({ map: T.booksTex(), roughness: 0.8 }),
       leather: std({ color: '#9a4f22', roughness: 0.45 }),
       orange: std({ color: '#d4552a', roughness: 0.8 }),
       chair: std({ color: '#0a0a0b', roughness: 0.85, envMapIntensity: 0.25 }),
       drum: std({ map: T.drumTex(), roughness: 0.08, metalness: 0.65, envMapIntensity: 1.6 }),
-      drumIn: std({ map: T.sageTex(), roughness: 0.9, side: THREE.BackSide }),
+      drumIn: bumpy(T.sageTex(), 0.6, { roughness: 0.9, side: THREE.BackSide }),
       frosted: std({ color: '#e9eef2', transparent: true, opacity: 0.75, roughness: 0.3 }),
-      carpet: std({ map: T.carpetTex(), color: '#d9cdb8', roughness: 1 }),
-      roomCarpet: std({ map: T.carpetTex([3, 3], '#c3bcae'), roughness: 1 }),
-      tierCarpet: std({ map: T.carpetTex([0.4, 0.4], '#c3bcae'), roughness: 1 }),
+      carpet: std({ ...T.pbr('carpet', [0.8, 0.8]), color: '#e8ddc9' }),
+      roomCarpet: std({ ...T.pbr('carpet', [9.6, 9.6]), color: '#cfc8bb' }),
+      tierCarpet: std({ ...T.pbr('carpet', [1.28, 1.28]), color: '#cfc8bb' }),
       stepEdge: std({ color: '#d9822b', roughness: 0.7 }),
-      beinCarpet: std({ map: T.carpetTex([4, 4]), roughness: 1 }),
-      stone: std({ map: T.stoneTex([2, 2]), roughness: 0.95 }),
+      beinCarpet: std({ ...T.pbr('carpet', [12.8, 12.8]), color: '#e8ddc9' }),
+      stone: bumpy(T.stoneTex([2, 2]), 2.5, { roughness: 0.9 }),
       ceiling: std({ color: '#f7f5f0', roughness: 1, side: THREE.DoubleSide }),
-      lawn: std({ map: T.lawnTex(), roughness: 1 }),
+      lawn: bumpy(T.lawnTex(), 1.5, { roughness: 1 }),
       ground: std({ color: '#2b3a26', roughness: 1 }),
       cafe: std({ map: T.windowsTex(true), emissive: '#ffffff', emissiveMap: T.windowsTex(true), emissiveIntensity: 0.6, side: THREE.DoubleSide }),
       upper: std({ map: T.windowsTex(false), emissive: '#ffffff', emissiveMap: T.windowsTex(false), emissiveIntensity: 0.35, side: THREE.DoubleSide }),
@@ -142,35 +148,77 @@ function useMaterials() {
       dark: std({ color: '#1b1c20', roughness: 0.6 }),
       exit: new THREE.MeshBasicMaterial({ map: T.exitTex() }),
       opening: std({ map: T.stairOpeningTex(), roughness: 0.9 }),
-      trunk: std({ color: '#4a3524', roughness: 1 }),
-      crown: std({ color: '#2f4a25', roughness: 1 }),
-      pot: std({ color: '#26262a', roughness: 0.7 }),
-      leaf: std({ color: '#3f7a35', roughness: 0.9 }),
-      lamp: new THREE.MeshBasicMaterial({ color: '#fffaf0' }),
+      lamp: new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 3.1, 2.9), toneMapped: false }), // > 1 so bloom picks it up
       column: std({ color: '#eceae6', roughness: 0.6 }),
+      baseboard: std({ color: '#3a3632', roughness: 0.55 }),
     }
   }, [])
 }
 
-// ---------- scene setup: env reflections + dusk sky
-function Atmosphere() {
+// ---------- scene setup: night in Evans Hall. Cold moonlight, fog that swallows the far end of the
+// cloister, a black sky, faint reflections, and the ceiling lights mostly dead, sputtering back on now and then.
+const NIGHT = new THREE.Color('#05070c')
+const ENV_LEVEL = 0.12
+
+function Atmosphere({ M }) {
   const { gl, scene } = useThree()
   useLayoutEffect(() => {
+    // reflections + fill: a synthetic room right away, then a real photographed interior (HDRI) once it loads
     const pm = new THREE.PMREMGenerator(gl)
     const env = pm.fromScene(new RoomEnvironment(), 0.04).texture
     scene.environment = env
-    scene.environmentIntensity = 0.55
-    scene.background = T.skyTex()
+    scene.environmentIntensity = ENV_LEVEL
+    scene.background = NIGHT
+    scene.fog = new THREE.FogExp2('#06080d', 0.055)
+    let hdr
+    let alive = true
+    new RGBELoader().load(`${import.meta.env.BASE_URL}hdri/art_studio_1k.hdr`, (t) => {
+      if (!alive) return t.dispose()
+      t.mapping = THREE.EquirectangularReflectionMapping
+      hdr = t
+      scene.environment = t
+      scene.environmentIntensity = ENV_LEVEL
+    })
     return () => {
+      alive = false
       env.dispose()
+      hdr?.dispose()
       pm.dispose()
     }
   }, [gl, scene])
+
+  const flicker = useRef(0)
+  useFrame((_, dt) => {
+    flicker.current -= dt
+    if (flicker.current <= 0) {
+      const on = Math.random() < 0.18 // brief stutters of light
+      const k = on ? 0.6 + Math.random() * 1.6 : 0.05 + Math.random() * 0.08
+      M.lamp.color.setRGB(k, k * 0.97, k * 0.9)
+      flicker.current = on ? 0.04 + Math.random() * 0.12 : 0.3 + Math.random() * 2.5
+    }
+  })
+
   return (
     <>
-      <hemisphereLight args={['#e3ebff', '#8a7a66', 0.75]} />
-      <ambientLight intensity={0.2} />
-      <directionalLight position={[20, 40, 10]} intensity={0.6} />
+      {/* moonlight from above: casts real shadows (the ceiling doesn't cast, so it reads like light
+          spilling through the building, not a lid) */}
+      <hemisphereLight args={['#3a4a6a', '#0a0a10', 0.12]} />
+      <ambientLight intensity={0.02} />
+      <directionalLight
+        position={[14, 45, 9]}
+        intensity={0.45}
+        color="#8fa6d8"
+        castShadow
+        shadow-mapSize={[4096, 4096]}
+        shadow-bias={-0.0004}
+        shadow-normalBias={0.04}
+        shadow-camera-left={-60}
+        shadow-camera-right={60}
+        shadow-camera-top={60}
+        shadow-camera-bottom={-60}
+        shadow-camera-near={1}
+        shadow-camera-far={120}
+      />
     </>
   )
 }
@@ -231,20 +279,13 @@ function Courtyard({ M }) {
       <mesh geometry={cafe} material={M.cafe} />
       <mesh geometry={upper} material={M.upper} />
       <Instanced items={mullions} material={M.mullion} geometry={BOX} />
-      <Instanced items={trees.map(([x, z]) => ({ p: [x, -3.5, z], s: [0.35, 3, 0.35] }))} material={M.trunk} geometry={BOX} />
-      <Instanced
-        items={trees.map(([x, z], i) => ({ p: [x, -0.8 + (i % 3) * 0.6, z], s: [3.2, 2.6, 3.2] }))}
-        material={M.crown}
-        geometry={SPHERE}
-      />
+      <Trees spots={trees.map(([x, z], i) => ({ x, y: -5, z, h: 5.6 + (i % 3) * 0.6 }))} />
       <Instanced items={cafeTables} material={M.board} geometry={BOX} />
-      <LabubuParty />
     </>
   )
 }
-const SPHERE = new THREE.SphereGeometry(1, 14, 10)
 
-function OutsideTrees({ M }) {
+function OutsideTrees() {
   const items = useMemo(() => {
     const r = rng(12)
     const out = []
@@ -260,19 +301,31 @@ function OutsideTrees({ M }) {
     }
     return out
   }, [])
-  return (
-    <>
-      <Instanced items={items.map(([x, z]) => ({ p: [x, -2.5, z], s: [0.5, 5, 0.5] }))} material={M.trunk} geometry={BOX} />
-      <Instanced items={items.map(([x, z, s]) => ({ p: [x, 1 + s * 0.5, z], s: [s, s * 0.9, s] }))} material={M.crown} geometry={SPHERE} />
-    </>
-  )
+  return <Trees spots={items.map(([x, z, s]) => ({ x, y: -5, z, h: 6 + s * 1.4 }))} />
 }
 
 // ---------- walls (instanced by material)
 const WALL_MATS = ['white', 'sage', 'exterior', 'libGlass', 'beinGlass', 'meetGlass', 'slats', 'desk', 'shelf', 'leather', 'orange']
+const FURNITURE = new Set(['desk', 'shelf', 'leather', 'orange'])
 function Walls({ M }) {
   const groups = useMemo(() => WALL_MATS.map((m) => [m, wallItems(m)]), [])
-  return groups.map(([m, items]) => <Instanced key={m} items={items} material={M[m]} geometry={BOX} />)
+  // dark baseboards where full-height painted walls meet the floor
+  const baseboards = useMemo(
+    () =>
+      ['white', 'sage']
+        .flatMap(wallItems)
+        .filter((w) => w.s[1] > 2 && w.p[1] - w.s[1] / 2 < 0.01)
+        .map((w) => ({ p: [w.p[0], 0.06, w.p[2]], r: w.r, s: [w.s[0], 0.12, w.s[2] + 0.03] })),
+    [],
+  )
+  return (
+    <>
+      {groups.map(([m, items]) => (
+        <Instanced key={m} items={items} material={M[m]} geometry={FURNITURE.has(m) ? ROUNDED : BOX} />
+      ))}
+      <Instanced items={baseboards} material={M.baseboard} geometry={BOX} />
+    </>
+  )
 }
 
 // ---------- stadium-seating risers: stacked slabs, carpet on top, orange step edges
@@ -507,7 +560,6 @@ function MeetingRooms({ M }) {
       {MEETING.map((m, i) => (
         <GlassDoor key={i} door={m.door} M={M} />
       ))}
-      <MeetingLabubus />
     </>
   )
 }
@@ -531,21 +583,37 @@ function Details({ M }) {
   return (
     <>
       <Instanced items={lights} material={M.lamp} geometry={lampGeo} />
-      <Instanced items={PLANTS.map(([x, z]) => ({ p: [x, 0.3, z], s: [0.3, 0.6, 0.3] }))} material={M.pot} geometry={BOX} />
-      <Instanced items={PLANTS.map(([x, z]) => ({ p: [x, 1.1, z], s: [0.5, 0.65, 0.5] }))} material={M.leaf} geometry={SPHERE} />
+      <PottedPlants spots={PLANTS} />
       <MeetingRooms M={M} />
     </>
   )
+}
+
+// Shadows on every solid mesh. Glass and flat screens don't cast, and neither do the ceiling and the
+// upper facades: the key light is overhead, and they'd put the whole floor in shade.
+function ShadowFlags({ M }) {
+  const { scene } = useThree()
+  useEffect(() => {
+    const noCast = new Set([M.ceiling, M.upper, M.cafe, M.exterior])
+    scene.traverse((o) => {
+      if (!o.isMesh) return
+      const mats = Array.isArray(o.material) ? o.material : [o.material]
+      const solid = mats.every((m) => m && !m.transparent && !m.isMeshBasicMaterial && m.depthTest !== false) // not the first-person hands
+      o.receiveShadow = solid
+      o.castShadow = solid && !mats.some((m) => noCast.has(m))
+    })
+  }, [scene, M])
+  return null
 }
 
 export default function World() {
   const M = useMaterials()
   return (
     <>
-      <Atmosphere />
+      <Atmosphere M={M} />
       <FloorAndCeiling M={M} />
       <Courtyard M={M} />
-      <OutsideTrees M={M} />
+      <OutsideTrees />
       <Walls M={M} />
       <Drums M={M} />
       <Tiers M={M} />
@@ -553,9 +621,10 @@ export default function World() {
       <Beinecke M={M} />
       <Stairs M={M} />
       <Details M={M} />
-      <LabubuCrowd />
       <Faculty />
       <HandsomeDan />
+      <Rivals />
+      <ShadowFlags M={M} />
     </>
   )
 }
