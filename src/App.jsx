@@ -19,6 +19,9 @@ import { EYE, SPAWN } from './layout.js'
 // Crimson Tide of the Dead: Harvard zombies vs. Yale in Evans Hall at night.
 // ?classic in the URL turns off shadows + post-processing (for slow computers).
 const HQ = !new URLSearchParams(location.search).has('classic')
+// phones and tablets get a lighter look: no shadows or ambient occlusion, a lower pixel ratio, and only
+// the cheap effects (bloom keeps the glowing eyes; the grade keeps the mood)
+const PHONE = matchMedia('(pointer: coarse)').matches
 
 export default function App() {
   const [locked, setLocked] = useState(false)
@@ -48,6 +51,10 @@ export default function App() {
     else if (relock) lockRef.current?.() // the closing click counts as a gesture, so we can re-grab the mouse
   }
   const playing = locked || touchOn
+  // phone layout (styles.css: .touchmode): the status panel moves up out of the thumbs' way
+  useEffect(() => {
+    document.body.classList.toggle('touchmode', touchOn)
+  }, [touchOn])
   const typing = (e) => e.target.closest?.('input, textarea')
   useEffect(() => {
     const k = (e) => e.code === 'KeyM' && !typing(e) && setShowMap((v) => !v)
@@ -181,13 +188,22 @@ export default function App() {
 
   return (
     <>
-      <Canvas camera={{ fov: 72, near: 0.05, far: 800, position: [SPAWN.x, EYE, SPAWN.z] }} dpr={[1, 1.75]} shadows={HQ}>
+      <Canvas camera={{ fov: 72, near: 0.05, far: 800, position: [SPAWN.x, EYE, SPAWN.z] }} dpr={PHONE ? [1, 1.5] : [1, 1.75]} shadows={HQ && !PHONE}>
         <World />
         <Player lockRef={lockRef} mapRef={mapRef} touchRef={touchRef} onLock={onLock} onWhere={onWhere} />
         <Hands />
         {/* ambient occlusion grounds everything, lights and glowing eyes bloom, then a drained, grainy, filmic
             grade with a tight vignette: dread, not cartoon */}
-        {HQ && (
+        {HQ && PHONE && (
+          <EffectComposer multisampling={0}>
+            <Bloom mipmapBlur luminanceThreshold={1.4} luminanceSmoothing={0.2} intensity={1.1} />
+            <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
+            <HueSaturation saturation={-0.42} />
+            <BrightnessContrast contrast={0.14} brightness={-0.03} />
+            <Vignette offset={0.18} darkness={0.88} />
+          </EffectComposer>
+        )}
+        {HQ && !PHONE && (
           <EffectComposer multisampling={0}>
             <N8AO halfRes quality="medium" aoRadius={1.4} distanceFalloff={0.6} intensity={3.2} />
             <Bloom mipmapBlur luminanceThreshold={1.4} luminanceSmoothing={0.2} intensity={1.1} />
@@ -203,7 +219,7 @@ export default function App() {
 
       <div className="where">
         <span className="dot" />
-        {where}
+        <span className="wtext">{where}</span>
       </div>
       <div className={showMap ? 'mapwrap' : 'mapwrap hidden'}>
         <Minimap drawRef={mapRef} />
@@ -295,8 +311,9 @@ export default function App() {
           <button onClick={meleeAttack} aria-label="Melee swing">
             {MELEE[melee].icon}
           </button>
-          <button onClick={useRanged} aria-label={`Use ${RANGED[ranged]?.name}`}>
+          <button onClick={useRanged} aria-label={`Use ${RANGED[ranged]?.name}`} className={RANGED[ranged]?.have() ? '' : 'empty'}>
             {RANGED[ranged]?.icon}
+            {RANGED[ranged]?.count() != null && <span className="ct">{RANGED[ranged].count()}</span>}
           </button>
           <button onClick={() => chat.set({ wheelOpen: true })} aria-label="Open the weapon wheel">
             🎯
@@ -427,6 +444,8 @@ export default function App() {
               <div className="keys">
                 <span><b>Left thumb</b> joystick to walk (push all the way to hurry)</span>
                 <span><b>Right thumb</b> drag to look</span>
+                <span><b>Round buttons</b> swing, throw, weapon wheel, sic Dan</span>
+                <span className="rotatetip">📱 Turn your phone sideways for the best view</span>
               </div>
             ) : (
               <div className="keys">

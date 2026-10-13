@@ -46,7 +46,7 @@ The Vite dev server proxies `/api` to port 8000. The GitHub Pages build has no b
 | B | Endowment Office (between waves) |
 | M / Esc | map / pause |
 
-**Phone / tablet:** tap **Tap to walk in**. The left-thumb joystick walks, dragging anywhere else looks around, and round buttons swing, throw, open the weapon wheel, and send Dan. On a laptop, click **Use on-screen joystick** to try the phone controls.
+**Phone / tablet:** tap **Tap to walk in**. The left-thumb joystick walks, dragging anywhere else looks around, and round buttons swing, throw, open the weapon wheel, and send Dan. The status panel moves to the top left out of your thumbs' way, and phones automatically get lighter graphics (no shadows or ambient occlusion) so they run smoothly. Sideways is the best view. On a laptop, click **Use on-screen joystick** to try the phone controls.
 
 ## How it's built
 

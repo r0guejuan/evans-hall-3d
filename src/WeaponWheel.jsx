@@ -6,7 +6,9 @@ import { equip, wheelOptions } from './Rivals.jsx'
 // release Tab to equip it. Melee picks go to Space, everything else to L / right click.
 // On touch, tap a slice (or the middle to close).
 
-const R = 150 // px from the center to each slice
+// px from the center to each slice (tighter on short screens, like a phone held sideways)
+const TOUCH = matchMedia('(pointer: coarse)').matches
+const radius = () => Math.max(96, Math.min(150, (window.innerHeight - 110) / 2.2))
 
 export default function WeaponWheel() {
   const open = useChat((s) => s.wheelOpen)
@@ -59,6 +61,7 @@ export default function WeaponWheel() {
 
   if (!open) return null
   const n = opts.length
+  const R = radius()
   const current = opts[sel]
   return (
     <div className="wheel" role="dialog" aria-label="Weapon wheel">
@@ -89,7 +92,7 @@ export default function WeaponWheel() {
               <small>{current.ready ? (current.kind === 'melee' ? 'melee · Space' : 'long range · L') : 'buy it at the Endowment Office'}</small>
             </>
           ) : (
-            <small>flick toward a weapon, release Tab</small>
+            <small>{TOUCH ? 'tap a weapon' : 'flick toward a weapon, release Tab'}</small>
           )}
         </button>
       </div>
