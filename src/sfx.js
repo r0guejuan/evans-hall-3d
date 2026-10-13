@@ -1,7 +1,7 @@
 // Game sound, synthesized with the Web Audio API (no audio files): a low uneasy drone, zombie groans
 // that get louder as they close in, a heartbeat when you're hurt, hits, throws, explosions, and a thud when
 // a zombie gets you. (No ding per kill: with a squad fighting it never stopped.)
-// Browsers only allow audio after a user gesture, so start() is called from a click/key handler.
+// Browsers only allow audio after a user gesture, so start() is called from a click/key/tap handler.
 
 let ctx = null
 let master = null
@@ -24,7 +24,62 @@ export function setMuted(on) {
   if (master) master.gain.setTargetAtTime(on ? 0 : 0.8, ctx.currentTime, 0.1)
 }
 
+// iPhones: Web Audio obeys the ring/silent switch, so a phone on silent plays nothing. Asking for the
+// "playback" audio session (iOS 16.4+) makes the game sound like a video does; older iOS gets the same
+// effect from a looping silent <audio> element. iOS also only unlocks audio from a tap's release (not
+// its press) and suspends it when you switch apps, so every touchend/click nudges it back awake.
+let unlockedSession = false
+function playbackSession() {
+  if (unlockedSession) return
+  unlockedSession = true
+  if (navigator.audioSession) {
+    try {
+      navigator.audioSession.type = 'playback'
+    } catch {
+      // not allowed here; fall through to the <audio> trick below
+    }
+    return
+  }
+  if (!/iPhone|iPad|iPod/.test(navigator.userAgent) && !(navigator.maxTouchPoints > 1 && /Mac/.test(navigator.userAgent))) return
+  // half a second of 8 kHz, 8-bit silence as a WAV
+  const n = 4000
+  const bytes = new Uint8Array(44 + n)
+  const dv = new DataView(bytes.buffer)
+  const str = (o, t) => [...t].forEach((c, i) => (bytes[o + i] = c.charCodeAt(0)))
+  str(0, 'RIFF')
+  dv.setUint32(4, 36 + n, true)
+  str(8, 'WAVEfmt ')
+  dv.setUint32(16, 16, true)
+  dv.setUint16(20, 1, true)
+  dv.setUint16(22, 1, true)
+  dv.setUint32(24, 8000, true)
+  dv.setUint32(28, 8000, true)
+  dv.setUint16(32, 1, true)
+  dv.setUint16(34, 8, true)
+  str(36, 'data')
+  dv.setUint32(40, n, true)
+  bytes.fill(128, 44)
+  const el = document.createElement('audio')
+  el.src = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }))
+  el.loop = true
+  el.setAttribute('playsinline', '')
+  el.play().catch(() => {})
+}
+
+function wake() {
+  if (!ctx) return
+  if (ctx.state !== 'running') ctx.resume().catch(() => {})
+  // a one-sample silent blip, played inside the gesture, is what actually unlocks iOS
+  const b = ctx.createBuffer(1, 1, 22050)
+  const src = ctx.createBufferSource()
+  src.buffer = b
+  src.connect(ctx.destination)
+  src.start(0)
+}
+
+let listening = false
 export function start() {
+  playbackSession()
   if (!ctx) {
     const AC = window.AudioContext || window.webkitAudioContext
     if (!AC) return
@@ -33,7 +88,12 @@ export function start() {
     master.gain.value = muted ? 0 : 0.8
     master.connect(ctx.destination)
   }
-  if (ctx.state === 'suspended') ctx.resume()
+  wake()
+  if (!listening) {
+    listening = true
+    for (const type of ['touchend', 'click', 'keydown']) window.addEventListener(type, () => ctx.state !== 'running' && wake(), { passive: true })
+    document.addEventListener('visibilitychange', () => !document.hidden && ctx.state !== 'running' && ctx.resume().catch(() => {}))
+  }
 }
 
 // low, slightly detuned drone with a slow swell: the "something's wrong" bed under everything
