@@ -31,6 +31,9 @@ const PLAYER_DPS = 14 // health per second while a zombie is on you
 const CLAW_DPS = 1 // zombie damage to a student per second
 const PUNCH = 0.8 // student punch damage, once a second
 const SIGHT_S = 15 // how far a Yale student spots a zombie
+const PER_ZOMBIE = 3 // at most this many students gang up on one zombie (the rest find another, or patrol)
+const PER_THIEF = 6 // ...but a Labubu thief gets mobbed
+const SPACE_S = 1.0 // students keep this far apart (m)
 const SIGHT_Z = 11 // how far a zombie notices a student (or you)
 const STALKER_SHARE = 0.35 // this share of each wave comes straight for you
 const STALK_AFTER = 40 // seconds: after this, every zombie smells you
@@ -356,7 +359,7 @@ function poseAgent(meshes, parts, i, a, t, kind) {
 // ---------- module state (so App and the chat can bonk, cast, power up, and restart)
 const S = {
   zombies: Array.from({ length: MAX_ZOMBIES }, (_, i) => ({ on: false, phase: i * 1.3 })),
-  students: Array.from({ length: MAX_STUDENTS }, (_, i) => ({ on: false, phase: i * 0.9, costume: COSTUME_IDS[i % COSTUME_IDS.length], side: i % 2 ? 1 : -1 })),
+  students: Array.from({ length: MAX_STUDENTS }, (_, i) => ({ on: false, phase: i * 0.9, costume: COSTUME_IDS[i % COSTUME_IDS.length] })),
   squad: STUDENTS, // how many student slots are in play
   dan: { cool: { bark: 0, charge: 0, howl: 0 }, level: 1, target: null, dash: 0, x: 0, z: 0, yaw: 0, moving: false },
   wave: 0,
@@ -745,8 +748,9 @@ function navTo(a, tx, tz, speed, dt, stopAt) {
   followRing(a, speed, dt)
   return Infinity
 }
-// no progress for 1 s: reroute (turn around on the loop, other lane); still stuck after that: step back onto the loop
-function unstick(a, dt) {
+// no progress for 1 s: reroute (turn around on the loop, other lane); still stuck after that: step back onto the loop.
+// Boxed in by teammates instead? Turning around just walks into the next one, so give way: pause, change lanes.
+function unstick(a, dt, crowded = false) {
   a.stuckT = (a.stuckT ?? 0) + dt
   if (a.stuckT < 1) return
   a.stuckT = 0
@@ -755,6 +759,12 @@ function unstick(a, dt) {
   a.lz = a.z
   if (!a.moving || moved > 0.3) {
     a.stuckN = 0
+    return
+  }
+  if (crowded) {
+    a.yieldT = 0.3 + Math.random() * 0.7
+    a.lane = (Math.random() - 0.5) * 2.4
+    a.los = false
     return
   }
   a.stuckN = (a.stuckN || 0) + 1
@@ -771,8 +781,13 @@ function unstick(a, dt) {
 const navInit = () => ({ ri: null, dir: Math.random() < 0.5 ? -1 : 1, lane: (Math.random() - 0.5) * 1.8, los: false, losT: 0, stuckT: Math.random() * 1.5, stuckN: 0, lx: null, lz: null })
 
 function spawnStudent(s, p, near = true) {
-  const at = near ? ringPoint(p, 3, 10) : ringPoint(p, 5, 30) // first rally near you; later anywhere
-  Object.assign(s, { on: true, x: at.x, z: at.z, y: 0, yaw: 0, hp: 5, down: false, downT: 0, moving: false, attacking: false, cool: 0, flash: 0, pace: 0.8 + Math.random() * 0.5, ...navInit() })
+  // spread out around the halls (not one clump next to you), a few meters from any teammate
+  let at
+  for (let k = 0; k < 10; k++) {
+    at = near ? ringPoint(p, 3, 45) : ringPoint(p, 5, 45)
+    if (!S.students.some((o) => o !== s && o.on && Math.hypot(o.x - at.x, o.z - at.z) < 2.5)) break
+  }
+  Object.assign(s, { on: true, x: at.x, z: at.z, y: 0, yaw: 0, hp: 5, down: false, downT: 0, moving: false, attacking: false, cool: 0, flash: 0, pace: 0.8 + Math.random() * 0.5, target: null, yieldT: 0, side: Math.random() * 2 - 1, ...navInit() })
 }
 
 function spawnZombie(p, thief) {
@@ -1335,6 +1350,13 @@ export default function Rivals() {
         }
       }
       const live = S.zombies.filter(hostile)
+      // who's already on which zombie (students keep their target, so the gangs stay put)
+      const claims = new Map()
+      for (const s of S.students) {
+        if (!s.on || s.down || !s.target) continue
+        if (!hostile(s.target) || dist(s, s.target) > SIGHT_S * 1.3) s.target = null
+        else claims.set(s.target, (claims.get(s.target) || 0) + 1)
+      }
 
       // students: roam the building and hunt zombies on their own; spread out instead of bunching up
       for (const s of S.students) {
@@ -1352,21 +1374,33 @@ export default function Rivals() {
           s.moving = false
           continue
         }
-        let best = null
-        let bd = SIGHT_S
-        for (const z of live) {
-          const d = dist(s, z) * (z.thief ? 0.5 : 1) // a Labubu thief is a priority target
-          if (d < bd) {
-            bd = d
-            best = z
+        if (!s.target) {
+          let bd = SIGHT_S
+          for (const z of live) {
+            if ((claims.get(z) || 0) >= (z.thief ? PER_THIEF : PER_ZOMBIE)) continue // enough on that one already
+            const d = dist(s, z) * (z.thief ? 0.5 : 1) // a Labubu thief is a priority target
+            if (d < bd) {
+              bd = d
+              s.target = z
+            }
           }
+          if (s.target) claims.set(s.target, (claims.get(s.target) || 0) + 1)
+        }
+        const best = s.target
+        // giving way in a crowd: stand a moment (but still swing at anything in reach)
+        if (s.yieldT > 0) {
+          s.yieldT -= dt
+          s.moving = false
+          s.attacking = !!best && dist(s, best) <= REACH
+          s.y = floorAt(s.x, s.z)
+          continue
         }
         if (best) {
           // close in from the side (each student flanks a little differently)
           const dx = best.x - s.x
           const dz = best.z - s.z
           const l = Math.hypot(dx, dz) || 1
-          const flank = Math.min(1, l / 4) * 0.8 * s.side
+          const flank = Math.min(1, l / 4) * 0.9 * s.side
           const d = navTo(s, best.x - (dz / l) * flank, best.z + (dx / l) * flank, S_SPEED * s.pace, dt, REACH * 0.85)
           s.attacking = d <= REACH
           s.cool -= dt
@@ -1380,7 +1414,9 @@ export default function Rivals() {
           s.attacking = false
           followRing(s, S_SPEED * 0.55 * s.pace, dt)
         }
-        unstick(s, dt)
+        let near = 0
+        for (const o of S.students) if (o !== s && o.on && !o.down && Math.abs(o.x - s.x) < 1.3 && Math.abs(o.z - s.z) < 1.3) near++
+        unstick(s, dt, near >= 2)
         s.y = floorAt(s.x, s.z)
       }
       // students keep their distance from each other too
@@ -1393,12 +1429,16 @@ export default function Rivals() {
           const dx = sb.x - sa.x
           const dz = sb.z - sa.z
           const d = Math.hypot(dx, dz)
-          if (d < 1.4 && d > 1e-4) {
-            const push = (1.4 - d) / 2
-            sa.x -= (dx / d) * push
-            sa.z -= (dz / d) * push
-            sb.x += (dx / d) * push
-            sb.z += (dz / d) * push
+          if (d < SPACE_S && d > 1e-4) {
+            // ease apart (not a shove), and never into a wall or a bench
+            const push = (SPACE_S - d) * 0.25
+            for (const [who, sgn] of [[sa, -1], [sb, 1]]) {
+              _p.x = who.x + (dx / d) * push * sgn
+              _p.z = who.z + (dz / d) * push * sgn
+              collide(_p, 1)
+              who.x = _p.x
+              who.z = _p.z
+            }
           }
         }
       }
