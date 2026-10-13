@@ -134,7 +134,7 @@ export default function Hands() {
   })
 
   // the left hand shows whatever long-range item is picked on the weapon wheel
-  const card = ranged === 'cards' && inv?.shuriken
+  const card = ranged === 'cards' && inv?.cards > 0
   const thermos = ranged === 'thermos' && inv?.thermos > 0
   return createPortal(
     <group>

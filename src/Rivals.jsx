@@ -8,7 +8,7 @@ import { DAN } from './HandsomeDan.jsx'
 import { ZAMAN } from './Zaman.jsx'
 import Labubu from './Labubu.jsx'
 import { NOTES } from './notes.js'
-import { CRASH, ITEMS, MELEE, SHURIKEN, TAKEOVER, THERMOS, bounty } from './weapons.js'
+import { ADMIT, CRASH, ITEMS, MELEE, SHURIKEN, TAKEOVER, THERMOS, bounty } from './weapons.js'
 import * as sfx from './sfx.js'
 
 // Rivals: the game. It's night in Evans Hall and Harvard zombies (crimson sweaters, white H) shamble through
@@ -16,13 +16,14 @@ import * as sfx from './sfx.js'
 // hunting them, and Handsome Dan fights at your side, unlocking abilities as the kill count grows. You
 // fight with business school gear bought with Endowment, power-ups earned by answering the professors'
 // questions (answers hidden on study notes around the building), and coffee from the snack table when
-// you're hurt. From wave 2 a thief zombie goes for the Labubu on Prof. Zaman's pants: once it grabs it,
-// you have 90 seconds to take it back, or Harvard wins.
+// you're hurt. Every wave sends Labubu thieves (wave N sends N) after the Labubu on Prof. Zaman's pants:
+// once one grabs it you have 90 seconds to drop the thief, pick the Labubu up, and carry it back to him,
+// or Harvard wins. Every 4th wave brings a boss zombie whose powers grow with each appearance.
 // Zombies and students are instanced rigs (one InstancedMesh per body part), posed by hand each frame.
 
 const MAX_ZOMBIES = 40
-const STUDENTS = 25 // the starting squad: they help, but the fight is yours
-const MAX_STUDENTS = 33 // room for reinforcements (Agent Army)
+const STUDENTS = 10 // classmates you start with; the fallen are gone for good, so recruit more at Admissions
+const MAX_STUDENTS = 33 // the most classmates fighting at once
 const Z_SPEED = 1.1 // m/s, plus a little per wave
 const S_SPEED = 2.6
 const DAN_SPEED = 4.8
@@ -44,7 +45,7 @@ const BONK_RANGE = 3.2
 const SPELL_RADIUS = 9
 const SPELL_DAMAGE = 6
 const DOWN_TIME = 3 // seconds a dead zombie lies there before it sinks away
-const KO_TIME = 6 // seconds a knocked-out student stays down
+const KO_TIME = 4 // seconds a fallen classmate lies there before they're gone
 const NOTE_RANGE = 3.5
 const INTERMISSION = 25 // seconds between waves to visit the Endowment Office
 const START_ENDOWMENT = 300
@@ -52,7 +53,17 @@ const LABUBU_TIME = 90 // seconds to get the Labubu back before Harvard wins
 export const VENDING = { x: -30.5, z: 12.45, rot: 0 } // against Ross Library's south wall, facing the cloister (+x east, -z north)
 // the coffee & snack table: south cloister (z > 0 is south), against the courtyard glass, facing the corridor
 export const COFFEE = { x: -4, z: 18.75, heal: 35, refill: 25 }
+// the Admissions desk, just east of the coffee table: recruit classmates (weapons.js: ADMIT prices)
+export const ADMISSIONS = { x: -1.4, z: 18.85 }
 const ZAMAN_ROOM = ROOMS[DRUMS.findIndex((d) => d.id === '2200')]
+
+// ---------- bosses: one every 4th wave. Each appearance is a higher tier, with more health and harder powers:
+// tier 1 ground slam · 2 + calls in the alumni (minions) · 3 (wave 12) + hurls crimson bolts from range ·
+// 4 + charges at you · 5+ everything, faster and harder, with wider volleys
+export const BOSS_EVERY = 4
+const BOSS_NAMES = ['The Crimson Provost', 'Dean of Harvard Law', 'President of Harvard', 'The Harvard Corporation', 'Ghost of John Harvard']
+const bossName = (tier) => (tier <= BOSS_NAMES.length ? BOSS_NAMES[tier - 1] : `${BOSS_NAMES[BOSS_NAMES.length - 1]} ${'I'.repeat(Math.min(3, tier - BOSS_NAMES.length + 1))}`)
+const MAX_BOLTS = 24
 
 // Handsome Dan levels up with the team's kills
 export const DAN_LEVELS = [
@@ -283,6 +294,7 @@ const HAIR_TONES = ['#1a1412', '#3b2a1e', '#6e4a2c', '#b08a52', '#2a2a2a', '#c45
 const _pos = new THREE.Vector3()
 const _quat = new THREE.Quaternion()
 const _one = new THREE.Vector3(1, 1, 1)
+const _sc = new THREE.Vector3()
 const _zero = new THREE.Vector3(0, 0, 0)
 const _up = new THREE.Vector3(0, 1, 0)
 const _e = new THREE.Euler(0, 0, 0, 'YXZ')
@@ -316,7 +328,7 @@ function poseAgent(meshes, parts, i, a, t, kind) {
   }
   _pos.set(a.x + shake, y, a.z + shake)
   _quat.setFromAxisAngle(_up, a.yaw)
-  G.root.compose(_pos, _quat, _one)
+  G.root.compose(_pos, _quat, a.scale > 1 ? _sc.setScalar(a.scale) : _one) // bosses are bigger
   const ph = t * (kind === 'z' ? 5 : 9) + a.phase
   const walking = a.moving && !a.down
   const bob = walking ? Math.abs(Math.sin(ph)) * 0.03 : 0
@@ -360,7 +372,6 @@ function poseAgent(meshes, parts, i, a, t, kind) {
 const S = {
   zombies: Array.from({ length: MAX_ZOMBIES }, (_, i) => ({ on: false, phase: i * 1.3 })),
   students: Array.from({ length: MAX_STUDENTS }, (_, i) => ({ on: false, phase: i * 0.9, costume: COSTUME_IDS[i % COSTUME_IDS.length] })),
-  squad: STUDENTS, // how many student slots are in play
   dan: { cool: { bark: 0, charge: 0, howl: 0 }, level: 1, target: null, dash: 0, x: 0, z: 0, yaw: 0, moving: false },
   wave: 0,
   toSpawn: 0,
@@ -372,13 +383,15 @@ const S = {
   weapon: null, // { mult, range, left }
   slow: 0, // seconds left of The Long Problem Set
   labubuT: 0, // seconds left to rescue a stolen Labubu (0 = not stolen)
-  thiefSent: false, // this wave's thief is out
+  thievesLeft: 0, // Labubu thieves still to come this wave (wave N sends N)
+  bossDue: 0, // tier of the boss still to come this wave (0 = none)
+  bolts: [], // boss projectiles: { x, y, z, vx, vz, left, dmg }
   kills: 0,
   started: false,
   fx: [], // ground rings: { x, z, r, life, color }
   // the arsenal (see weapons.js)
   endowment: START_ENDOWMENT,
-  inv: { briefcase: false, shuriken: false, thermos: 1, takeover: 0, crash: 0 },
+  inv: { briefcase: false, cards: 0, thermos: 1, takeover: 0, crash: 0 },
   melee: 'wsj',
   ranged: 'thermos', // what L / right click uses (picked on the weapon wheel)
   cool: { melee: 0, card: 0, sic: 0 },
@@ -395,6 +408,10 @@ const S = {
   beatT: 0,
 }
 export { S as RIVALS }
+
+// where Prof. Zaman's Labubu is: home (on his pants), carried (by a thief), dropped (on the floor where
+// the thief went down), or player (you're running it back to him)
+export const LAB = { state: 'home', carrier: null, x: 0, z: 0 }
 
 // dev only: inspect the fight from the console
 if (import.meta.env.DEV) window.__rivals = S
@@ -417,6 +434,11 @@ function pushHud() {
     slowed: Math.ceil(S.slow),
     danLevel: S.dan.level,
     labubuIn: Math.ceil(S.labubuT),
+    labubuState: LAB.state,
+    boss: (() => {
+      const b = S.zombies.find((z) => z.on && !z.down && z.boss)
+      return b ? { name: b.boss.name, tier: b.boss.tier, pct: Math.max(0, Math.round((b.hp / b.maxHp) * 100)) } : null
+    })(),
     endowment: S.endowment,
     inv: { ...S.inv },
     melee: S.melee,
@@ -424,6 +446,7 @@ function pushHud() {
     intermission: S.cleared ? Math.ceil(S.interlude) : 0,
     crash: Math.ceil(S.crash),
     coffeeIn: Math.ceil(S.coffeeT),
+    classmates: S.students.filter((s) => s.on && !s.down).length,
   }
   const cur = chat.get()
   const changed = Object.keys(hud).some((k) => JSON.stringify(cur[k]) !== JSON.stringify(hud[k]))
@@ -436,10 +459,11 @@ export function resetRivals() {
   for (const s of S.students) s.on = false
   DAN.golden = false
   Object.assign(S, {
-    squad: STUDENTS, wave: 0, toSpawn: 0, spawnT: 0, interlude: 1.5, hp: 100, shield: 0, spells: 0, weapon: null, slow: 0, labubuT: 0, thiefSent: false, kills: 0, started: false, fx: [],
-    endowment: START_ENDOWMENT, inv: { briefcase: false, shuriken: false, thermos: 1, takeover: 0, crash: 0 }, melee: 'wsj', ranged: 'thermos', cool: { melee: 0, card: 0, sic: 0 }, cards: [], thermoses: [], crash: 0, cleared: false, coffeeT: 0,
+    wave: 0, toSpawn: 0, spawnT: 0, interlude: 1.5, hp: 100, shield: 0, spells: 0, weapon: null, slow: 0, labubuT: 0, thievesLeft: 0, bossDue: 0, bolts: [], kills: 0, started: false, fx: [],
+    endowment: START_ENDOWMENT, inv: { briefcase: false, cards: 0, thermos: 1, takeover: 0, crash: 0 }, melee: 'wsj', ranged: 'thermos', cool: { melee: 0, card: 0, sic: 0 }, cards: [], thermoses: [], crash: 0, cleared: false, coffeeT: 0,
   })
   Object.assign(S.dan, { cool: { bark: 0, charge: 0, howl: 0 }, level: 1, target: null, dash: 0 })
+  Object.assign(LAB, { state: 'home', carrier: null })
   chat.set({ wave: 0, kills: 0, over: null, zombie: null, note: null, labubuStolen: false })
   pushHud()
 }
@@ -455,10 +479,7 @@ const POWER_UPS = {
   confidence_interval_shield: () => (S.shield += 80),
   plain_english_potion: () => (S.hp = Math.min(100, S.hp + 60)),
   long_problem_set: () => (S.slow = 25),
-  agent_army: () => {
-    S.squad = Math.min(MAX_STUDENTS, S.squad + 4)
-    S.started = false // re-rally: the new students run in next frame
-  },
+  agent_army: () => recruit(4, S.player),
 }
 export function applyPowerUp(pu) {
   POWER_UPS[pu.id]?.()
@@ -480,7 +501,7 @@ export function castSpell() {
     z.hp -= SPELL_DAMAGE
     z.flash = 0.3
     z.stun = Math.max(z.stun || 0, 1)
-    const push = (SPELL_RADIUS - d) * 0.35
+    const push = (SPELL_RADIUS - d) * 0.35 * (z.boss ? 0.15 : 1)
     z.x += (dx / (d || 1)) * push
     z.z += (dz / (d || 1)) * push
   }
@@ -516,8 +537,9 @@ export function meleeAttack() {
     z.hp -= w.damage * (S.weapon?.mult || 1)
     z.flash = 0.25
     z.stun = Math.max(z.stun || 0, w.stun)
-    z.x += ((z.x - p.x) / (d || 1)) * w.knock
-    z.z += ((z.z - p.z) / (d || 1)) * w.knock
+    const knock = w.knock * (z.boss ? 0.15 : 1) // bosses barely budge
+    z.x += ((z.x - p.x) / (d || 1)) * knock
+    z.z += ((z.z - p.z) / (d || 1)) * knock
   }
   if (hits.length) sfx.hit(S.melee === 'briefcase')
   else sfx.whoosh()
@@ -525,7 +547,8 @@ export function meleeAttack() {
 
 // ranged: flick a business card along your line of sight
 export function throwCard() {
-  if (!canAct() || !S.inv.shuriken || S.cool.card > 0) return
+  if (!canAct() || S.inv.cards <= 0 || S.cool.card > 0) return
+  S.inv.cards -= 1
   S.cool.card = SHURIKEN.cooldown
   act('card')
   const p = S.player
@@ -547,17 +570,14 @@ export function hostileTakeover() {
   if (!canAct() || S.inv.takeover <= 0) return
   const z = S.aim && S.zombies[S.aim.i]
   if (!z || !hostile(z) || S.aim.d > TAKEOVER.range) return banner('🤝 Aim at a zombie (within 16 m) to stage a Hostile Takeover.', 2200)
+  if (z.boss) return banner(`👑 ${z.boss.name} is too powerful for a takeover.`, 2200)
   S.inv.takeover -= 1
   act('takeover')
   z.ally = TAKEOVER.time
   z.hp = Math.max(z.hp, 6)
-  if (z.thief) {
-    if (z.thief.carrying) {
-      rescueLabubu()
-      banner('💗 Takeover! The thief hands the Labubu back to Prof. Zaman.')
-    }
-    z.thief = null
-  } else banner('🤝 Hostile Takeover! That zombie fights for Yale now.', 2200)
+  if (LAB.carrier === z) dropLabubu(z)
+  else banner('🤝 Hostile Takeover! That zombie fights for Yale now.', 2200)
+  z.thief = null
   S.fx.push({ x: z.x, z: z.z, r: 1.6, life: 0.6, max: 0.6, color: '#4aa3ff' })
   pushHud()
 }
@@ -597,7 +617,7 @@ export function sicEm() {
 
 // ---------- the weapon wheel: melee options, and the long-range slot (L / right click)
 export const RANGED = {
-  cards: { name: 'Business Cards', icon: '📇', have: () => S.inv.shuriken, count: () => null, use: () => throwCard() },
+  cards: { name: 'Business Cards', icon: '📇', have: () => S.inv.cards > 0, count: () => S.inv.cards, use: () => throwCard() },
   thermos: { name: 'Coffee Thermos', icon: '☕', have: () => S.inv.thermos > 0, count: () => S.inv.thermos, use: () => throwThermos() },
   takeover: { name: 'Hostile Takeover', icon: '🤝', have: () => S.inv.takeover > 0, count: () => S.inv.takeover, use: () => hostileTakeover() },
   crash: { name: 'Market Crash', icon: '📉', have: () => S.inv.crash > 0, count: () => S.inv.crash, use: () => marketCrash() },
@@ -640,20 +660,43 @@ export function equipMelee(id) {
 export const canShop = () => S.wave === 0 || (S.toSpawn === 0 && !S.zombies.some((z) => z.on && !z.down))
 export function buy(id) {
   const melee = MELEE[id]
-  const price = melee ? melee.price : id === 'shuriken' ? SHURIKEN.price : ITEMS[id]?.price
+  const price = melee ? melee.price : id === 'cards' ? SHURIKEN.price : ITEMS[id]?.price
   if (price == null || S.endowment < price || !canShop()) return false
-  if ((melee || id === 'shuriken') && S.inv[id]) return false // already own it
+  if (melee && S.inv[id]) return false // already own it
   S.endowment -= price
   if (melee) {
     S.inv[id] = true
     S.melee = id
-  } else if (id === 'shuriken') {
-    S.inv.shuriken = true
+  } else if (id === 'cards') {
+    S.inv.cards += SHURIKEN.pack // a box of cards
     S.ranged = 'cards' // ready to throw
   }
   else S.inv[id] += 1
   sfx.coin()
   pushHud()
+  return true
+}
+// Admissions: recruit classmates (open any time, even mid-wave). They report in at the desk.
+export const classmateCount = () => S.students.filter((s) => s.on && !s.down).length
+export const freeSeats = () => S.students.filter((s) => !s.on).length
+function recruit(n, p, at) {
+  let added = 0
+  for (const s of S.students) {
+    if (added >= n) break
+    if (s.on) continue
+    spawnStudent(s, p, true, at)
+    added++
+  }
+  pushHud()
+  return added
+}
+export function hire(n) {
+  const price = n === 5 ? ADMIT.five : ADMIT.one * n
+  if (S.endowment < price || freeSeats() < n) return false
+  S.endowment -= price
+  recruit(n, S.player, ADMISSIONS)
+  sfx.coin()
+  banner(n === 1 ? '🎓 A new classmate joins the fight!' : `🎓 ${n} new classmates join the fight!`, 2200)
   return true
 }
 export function startNextWave() {
@@ -780,26 +823,35 @@ function unstick(a, dt, crowded = false) {
 }
 const navInit = () => ({ ri: null, dir: Math.random() < 0.5 ? -1 : 1, lane: (Math.random() - 0.5) * 1.8, los: false, losT: 0, stuckT: Math.random() * 1.5, stuckN: 0, lx: null, lz: null })
 
-function spawnStudent(s, p, near = true) {
-  // spread out around the halls (not one clump next to you), a few meters from any teammate
+function spawnStudent(s, p, near = true, desk = null) {
+  // spread out around the halls (not one clump next to you), a few meters from any teammate;
+  // recruits from Admissions report in at the desk instead
   let at
-  for (let k = 0; k < 10; k++) {
+  for (let k = 0; !desk && k < 10; k++) {
     at = near ? ringPoint(p, 3, 45) : ringPoint(p, 5, 45)
     if (!S.students.some((o) => o !== s && o.on && Math.hypot(o.x - at.x, o.z - at.z) < 2.5)) break
   }
+  if (desk) at = { x: desk.x + (Math.random() - 0.5) * 3, z: desk.z + 1.6 + Math.random() * 1.2 }
   Object.assign(s, { on: true, x: at.x, z: at.z, y: 0, yaw: 0, hp: 5, down: false, downT: 0, moving: false, attacking: false, cool: 0, flash: 0, pace: 0.8 + Math.random() * 0.5, target: null, yieldT: 0, side: Math.random() * 2 - 1, ...navInit() })
 }
 
-function spawnZombie(p, thief) {
+function spawnZombie(p, thief, { boss = 0, at = null } = {}) {
   const z = S.zombies.find((q) => !q.on)
   if (!z) return false
-  const at = ringPoint(p, 16, 34)
-  Object.assign(z, { on: true, x: at.x, z: at.z, y: 0, yaw: 0, hp: 4 + S.wave * 0.6, down: false, downT: 0, moving: true, attacking: false, flash: 0, stun: 0, retarget: 0, target: null, thief: null, stalker: Math.random() < STALKER_SHARE, age: 0, ...navInit() })
+  at = at || ringPoint(p, 16, 34)
+  const hp = boss ? Math.round(70 * boss ** 1.35 + S.wave * 4) : 4 + S.wave * 0.6
+  Object.assign(z, { on: true, x: at.x, z: at.z, y: 0, yaw: 0, hp, maxHp: hp, down: false, downT: 0, moving: true, attacking: false, flash: 0, stun: 0, burn: 0, retarget: 0, target: null, thief: null, boss: null, scale: 1, stalker: Math.random() < STALKER_SHARE, age: 0, ...navInit() })
+  if (boss) {
+    z.boss = { tier: boss, name: bossName(boss), slam: 4, summon: 6, bolt: 3, charge: 5, dash: 0 }
+    z.scale = Math.min(2.3, 1.55 + boss * 0.12)
+    z.stalker = true
+    const powers = ['ground slam', boss >= 2 && 'calls in the alumni', boss >= 3 && 'hurls crimson bolts from range', boss >= 4 && 'charges at you'].filter(Boolean).join(', ')
+    banner(`👑 BOSS: ${z.boss.name} has entered Evans Hall! Powers: ${powers}.`, 5000)
+    sfx.stinger(true)
+  }
   if (thief) {
-    // heads around the cloister, in through 2200's door, to Prof. Zaman
-    const R = ZAMAN_ROOM
-    z.thief = { carrying: false, i: 0, path: [...ringPath(nearestRing([z.x, z.z]), R.ring), R.outer, R.inner, null] } // null = Zaman himself
-    banner('🧟 A Harvard zombie is going for Prof. Zaman’s Labubu! Stop it before it gets to room 2200!', 3600)
+    z.thief = { path: null, i: 0 }
+    if (LAB.state === 'home') banner('🧟 A Labubu thief is heading for room 2200! Stop it before it reaches Prof. Zaman!', 3000)
   }
   return true
 }
@@ -843,9 +895,68 @@ function step(a, tx, tz, speed, dt, stopAt) {
   return d
 }
 
-function rescueLabubu() {
-  S.labubuT = 0
-  chat.set({ labubuStolen: false })
+// the thief went down: the Labubu lands on the floor, and the 90-second clock keeps running
+function dropLabubu(z) {
+  Object.assign(LAB, { state: 'dropped', carrier: null, x: z.x, z: z.z })
+  banner('💥 The thief dropped the Labubu! Grab it and run it back to Prof. Zaman in room 2200!', 3600)
+  pushHud()
+}
+function grabLabubu(z, p, msg) {
+  Object.assign(LAB, { state: 'carried', carrier: z })
+  if (!(S.labubuT > 0)) S.labubuT = LABUBU_TIME // the clock starts at the first theft, and keeps running until it's home
+  chat.set({ labubuStolen: true })
+  banner(msg, 3600)
+  sfx.stinger(true) // the alarm
+  z.thief.path = fleePath(nearestRing([z.x, z.z]), p)
+  z.thief.i = 0
+  pushHud()
+}
+// a thief's route around the cloister, in through 2200's door, to Prof. Zaman (null = Zaman himself)
+const homePath = (z) => [...ringPath(nearestRing([z.x, z.z]), ZAMAN_ROOM.ring), ZAMAN_ROOM.outer, ZAMAN_ROOM.inner, null]
+
+// what a Labubu thief does this frame. Returns false when it should just fight like any zombie
+// (someone else has the Labubu).
+function thiefStep(z, p, speed, dt) {
+  const th = z.thief
+  z.attacking = false
+  if (LAB.carrier === z || LAB.state === 'home') {
+    // carrying: run for the far side of the halls (and keep running); home: the route in to Zaman
+    if (LAB.state === 'home' && !th.path) {
+      th.path = homePath(z)
+      th.i = 0
+    }
+    const wp = th.path[th.i]
+    const tx = wp ? wp[0] : ZAMAN.x
+    const tz = wp ? wp[1] : ZAMAN.z
+    const d = step(z, tx, tz, speed * (LAB.carrier === z ? 1.5 : 1.25), dt, wp ? 0 : 0.6)
+    if (d < 0.45 || (!wp && d <= 0.7)) {
+      if (th.i < th.path.length - 1) th.i += 1
+      else if (LAB.state === 'home') {
+        grabLabubu(z, p, `😱 A zombie grabbed Prof. Zaman’s Labubu! Stop it and bring the Labubu back within ${LABUBU_TIME} seconds or Harvard wins!`)
+        th.path = [ZAMAN_ROOM.inner, ZAMAN_ROOM.outer, ...fleePath(ZAMAN_ROOM.ring, p)] // back out the door first
+      } else {
+        th.path = fleePath(nearestRing([z.x, z.z]), p)
+        th.i = 0
+      }
+    }
+    return true
+  }
+  th.path = null
+  if (LAB.state === 'dropped') {
+    // race you to it
+    navTo(z, LAB.x, LAB.z, speed * 1.3, dt, 0.3)
+    unstick(z, dt)
+    if (Math.hypot(z.x - LAB.x, z.z - LAB.z) < 0.8) grabLabubu(z, p, '😱 A zombie picked the Labubu back up! After it!')
+    return true
+  }
+  if (LAB.state === 'player') {
+    // you have it: they come for you, and one touch snatches it back
+    navTo(z, p.x, p.z, speed * 1.35, dt, 0.5)
+    unstick(z, dt)
+    if (dist(z, p) < 1.0) grabLabubu(z, p, '😱 A zombie snatched the Labubu right out of your hands!')
+    return true
+  }
+  return false // another thief has it: fight
 }
 
 // the thief runs for the point on the cloister loop farthest from you
@@ -857,9 +968,79 @@ function fleePath(from, p) {
   return ringPath(from, far)
 }
 
+// damage to you (the shield soaks it first)
+function hurtPlayer(dmg) {
+  const soak = Math.min(S.shield, dmg)
+  S.shield -= soak
+  S.hp -= dmg - soak
+  if (S.hurtT <= 0) {
+    sfx.hurt()
+    S.hurtT = 0.5
+  }
+}
+
+// a boss's powers, each on its own cooldown (shorter, and harder hitting, at higher tiers)
+function bossPowers(z, p, dt) {
+  const b = z.boss
+  const T = b.tier
+  for (const k of ['slam', 'summon', 'bolt', 'charge']) b[k] -= dt
+  const dp = dist(z, p)
+  // ground slam: a shockwave that hurts you and staggers students
+  const R = 4 + T * 0.5
+  const studentsNear = S.students.some((s) => s.on && !s.down && dist(s, z) < R * 0.8)
+  if (b.slam <= 0 && (dp < R * 0.85 || studentsNear)) {
+    b.slam = Math.max(3, 8 - T)
+    S.fx.push({ x: z.x, z: z.z, r: R, life: 0.7, max: 0.7, color: '#ff3b3b' })
+    sfx.boom()
+    if (dp < R) hurtPlayer(10 + T * 5)
+    for (const s of S.students) {
+      if (!s.on || s.down || dist(s, z) > R) continue
+      s.hp -= 1.5 + T * 0.5
+      s.flash = 0.3
+    }
+  }
+  // calls in the alumni: minions appear around the boss
+  if (T >= 2 && b.summon <= 0) {
+    b.summon = Math.max(8, 17 - T)
+    let n = 0
+    for (let k = 0; k < 1 + T; k++) {
+      const a = Math.random() * Math.PI * 2
+      const at = { x: z.x + Math.sin(a) * 1.8, z: z.z + Math.cos(a) * 1.8 }
+      _p.x = at.x
+      _p.z = at.z
+      collide(_p, 2)
+      if (spawnZombie(p, false, { at: { x: _p.x, z: _p.z } })) n++
+    }
+    if (n) banner(`📣 ${b.name} calls in ${n} Harvard alumni!`, 2200)
+  }
+  // crimson bolts from range (wave 12+): dodge them; walls stop them
+  if (T >= 3 && b.bolt <= 0 && dp > 3 && dp < 28 && clearPath(z.x, z.z, p.x, p.z)) {
+    b.bolt = Math.max(1.1, 3.4 - (T - 3) * 0.45)
+    const n = Math.min(5, 1 + (T - 3) * 2) // 1, then volleys of 3, then 5
+    const base = Math.atan2(p.x - z.x, p.z - z.z)
+    const speed = 11 + T
+    for (let k = 0; k < n; k++) {
+      if (S.bolts.length >= MAX_BOLTS) break
+      const a = base + (k - (n - 1) / 2) * 0.16
+      S.bolts.push({ x: z.x, y: 1.3 * z.scale, z: z.z, vx: Math.sin(a) * speed, vz: Math.cos(a) * speed, left: 3, dmg: 6 + T * 3 })
+    }
+    sfx.whoosh()
+  }
+  // charge: a burst straight at you
+  if (T >= 4 && b.charge <= 0 && dp > 4 && dp < 14 && clearPath(z.x, z.z, p.x, p.z)) {
+    b.charge = Math.max(4, 10 - T)
+    b.dash = 0.9
+    banner(`💨 ${b.name} charges!`, 1200)
+  }
+}
+
 function killZombie(z) {
   if (!(z.ally > 0)) {
-    S.endowment += bounty(S.wave, !!z.thief) // allies that collapse don't pay out
+    S.endowment += bounty(S.wave, !!z.thief, z.boss?.tier) // allies that collapse don't pay out
+  }
+  if (z.boss) {
+    banner(`👑 ${z.boss.name} is down! +$${bounty(S.wave, false, z.boss.tier).toLocaleString()}`, 3400)
+    sfx.boom()
   }
   z.ally = 0
   z.down = true
@@ -867,10 +1048,7 @@ function killZombie(z) {
   z.attacking = false
   z.moving = false
   S.kills += 1
-  if (z.thief?.carrying) {
-    rescueLabubu()
-    banner('💗 Labubu rescued! Back to Prof. Zaman it goes.')
-  }
+  if (LAB.carrier === z) dropLabubu(z)
   z.thief = null
   const lvl = danLevel(S.kills)
   if (lvl > S.dan.level) {
@@ -901,6 +1079,22 @@ function paperTex() {
   t.colorSpace = THREE.SRGBColorSpace
   return t
 }
+// a crown over the boss's head
+function crownTex() {
+  const c = document.createElement('canvas')
+  c.width = c.height = 128
+  const g = c.getContext('2d')
+  g.font = '96px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif'
+  g.textAlign = 'center'
+  g.textBaseline = 'middle'
+  g.fillText('👑', 64, 70)
+  const t = new THREE.CanvasTexture(c)
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+const BOLT_GEO = new THREE.SphereGeometry(0.17, 12, 8)
+const BOLT_MAT = new THREE.MeshStandardMaterial({ color: '#7a0010', emissive: '#ff2030', emissiveIntensity: 5 })
+
 function glowTex(color) {
   const c = document.createElement('canvas')
   c.width = 64
@@ -986,6 +1180,145 @@ function signTex() {
   const t = new THREE.CanvasTexture(c)
   t.colorSpace = THREE.SRGBColorSpace
   return t
+}
+
+function admitTex() {
+  const c = document.createElement('canvas')
+  c.width = 512
+  c.height = 160
+  const g = c.getContext('2d')
+  g.fillStyle = '#00356b'
+  g.fillRect(0, 0, 512, 160)
+  g.strokeStyle = '#ffffff'
+  g.lineWidth = 6
+  g.strokeRect(6, 6, 500, 148)
+  g.fillStyle = '#ffffff'
+  g.textAlign = 'center'
+  g.font = 'bold 50px Georgia, serif'
+  g.fillText('🎓 Admissions', 256, 74)
+  g.font = '28px Georgia, serif'
+  g.fillStyle = '#cfe0f5'
+  g.fillText(`recruit classmates · $${ADMIT.one} each`, 256, 124)
+  const t = new THREE.CanvasTexture(c)
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+
+// the Admissions officer: Yale-blue blazer, lanyard, clipboard, behind a little podium. Turns to face you
+// when you come close, and waves you over now and then.
+function AdmissionsDesk({ innerRef }) {
+  const { camera } = useThree()
+  const M = useMemo(
+    () => ({
+      blazer: std('#00356b', { roughness: 0.7 }),
+      slacks: std('#2a2c33'),
+      shirt: std('#f4f2ee'),
+      skin: std('#c68e64'),
+      hair: std('#2a1c14'),
+      shoe: std('#161412'),
+      board: std('#8a6a44'),
+      paper: std('#fbfaf5'),
+      podium: std('#7a5636', { roughness: 0.55 }),
+      gold: std('#c9a44a', { metalness: 0.7, roughness: 0.35 }),
+      sign: new THREE.MeshBasicMaterial({ map: admitTex(), toneMapped: false }),
+    }),
+    [],
+  )
+  const body = useRef()
+  const arm = useRef()
+  useFrame(({ clock }, dt) => {
+    const t = clock.elapsedTime
+    const dx = camera.position.x - ADMISSIONS.x
+    const dz = camera.position.z - ADMISSIONS.z
+    const want = Math.hypot(dx, dz) < 9 ? Math.atan2(dx, dz) : 0
+    body.current.rotation.y += wrap(want - body.current.rotation.y) * Math.min(1, dt * 4)
+    const wave = (t % 6) < 1.4 // a wave every few seconds
+    arm.current.rotation.z = wave ? -2.5 + Math.sin(t * 12) * 0.35 : -0.12
+    arm.current.rotation.x = wave ? 0 : -0.5
+  })
+  return (
+    <group ref={innerRef} position={[ADMISSIONS.x, 0, ADMISSIONS.z]}>
+      {/* podium with the Yale shield */}
+      <mesh position={[0, 0.55, 0.62]} material={M.podium} castShadow>
+        <boxGeometry args={[0.7, 1.1, 0.4]} />
+      </mesh>
+      <mesh position={[0, 0.75, 0.825]} material={M.gold}>
+        <boxGeometry args={[0.18, 0.22, 0.01]} />
+      </mesh>
+      <mesh position={[0, 1.95, -0.2]} material={M.sign}>
+        <planeGeometry args={[1.2, 0.375]} />
+      </mesh>
+      <pointLight position={[0, 1.6, 1]} color="#9cc4ff" intensity={4} distance={5} decay={2} />
+      <group ref={body}>
+        {/* legs + shoes */}
+        {[-0.09, 0.09].map((x) => (
+          <group key={x}>
+            <mesh position={[x, 0.45, 0]} material={M.slacks}>
+              <cylinderGeometry args={[0.07, 0.065, 0.86, 10]} />
+            </mesh>
+            <mesh position={[x, 0.035, 0.04]} material={M.shoe}>
+              <boxGeometry args={[0.1, 0.07, 0.24]} />
+            </mesh>
+          </group>
+        ))}
+        {/* blazer, shirt, tie, lanyard */}
+        <mesh position={[0, 1.17, 0]} material={M.blazer} castShadow>
+          <cylinderGeometry args={[0.21, 0.19, 0.6, 12]} />
+        </mesh>
+        <mesh position={[0, 1.33, 0.165]} rotation={[0.12, 0, 0]} material={M.shirt}>
+          <boxGeometry args={[0.1, 0.24, 0.02]} />
+        </mesh>
+        <mesh position={[0, 1.22, 0.19]} material={M.blazer}>
+          <boxGeometry args={[0.035, 0.22, 0.012]} />
+        </mesh>
+        <mesh position={[0, 1.08, 0.2]} material={M.paper}>
+          <boxGeometry args={[0.07, 0.1, 0.01]} />
+        </mesh>
+        {/* head */}
+        <mesh position={[0, 1.52, 0]} material={M.skin}>
+          <cylinderGeometry args={[0.05, 0.05, 0.08, 8]} />
+        </mesh>
+        <mesh position={[0, 1.66, 0]} material={M.skin} castShadow>
+          <sphereGeometry args={[0.115, 16, 12]} />
+        </mesh>
+        <mesh position={[0, 1.72, -0.015]} scale={[1, 0.62, 1.04]} material={M.hair}>
+          <sphereGeometry args={[0.12, 16, 12]} />
+        </mesh>
+        {[-0.04, 0.04].map((x) => (
+          <mesh key={x} position={[x, 1.68, 0.105]} material={M.shoe}>
+            <sphereGeometry args={[0.016, 8, 6]} />
+          </mesh>
+        ))}
+        <mesh position={[0, 1.61, 0.11]} rotation={[0, 0, Math.PI / 2]} material={M.shoe}>
+          <torusGeometry args={[0.03, 0.006, 6, 12, Math.PI]} />
+        </mesh>
+        {/* left arm: holds the clipboard */}
+        <group position={[0.24, 1.42, 0]} rotation={[-0.9, 0, 0.15]}>
+          <mesh position={[0, -0.22, 0]} material={M.blazer}>
+            <cylinderGeometry args={[0.055, 0.05, 0.46, 10]} />
+          </mesh>
+          <mesh position={[0, -0.47, 0]} material={M.skin}>
+            <sphereGeometry args={[0.045, 10, 8]} />
+          </mesh>
+          <mesh position={[-0.06, -0.5, 0.06]} rotation={[0.9, 0, 0]} material={M.board}>
+            <boxGeometry args={[0.24, 0.3, 0.015]} />
+          </mesh>
+          <mesh position={[-0.06, -0.494, 0.068]} rotation={[0.9, 0, 0]} material={M.paper}>
+            <boxGeometry args={[0.2, 0.25, 0.01]} />
+          </mesh>
+        </group>
+        {/* right arm: waves you over */}
+        <group ref={arm} position={[-0.24, 1.42, 0]}>
+          <mesh position={[0, -0.22, 0]} material={M.blazer}>
+            <cylinderGeometry args={[0.055, 0.05, 0.46, 10]} />
+          </mesh>
+          <mesh position={[0, -0.47, 0]} material={M.skin}>
+            <sphereGeometry args={[0.045, 10, 8]} />
+          </mesh>
+        </group>
+      </group>
+    </group>
+  )
 }
 
 // the healing station: a coffee urn, cups, and a tray of donuts and bagels under a warm light. Steam rises
@@ -1091,13 +1424,17 @@ export default function Rivals() {
   const rings = useRef([])
   const thiefLabubu = useRef()
   const thiefMark = useRef()
+  const thiefMarks = useRef([])
   const cardMesh = useRef()
   const thermosMesh = useRef()
   const allyMarks = useRef([])
   const vending = useRef()
   const coffee = useRef()
+  const admissions = useRef()
   const ray = useMemo(() => new THREE.Raycaster(), [])
-  const tex = useMemo(() => ({ paper: paperTex(), red: glowTex('#ff3b3b'), blue: glowTex('#4aa3ff') }), [])
+  const tex = useMemo(() => ({ paper: paperTex(), red: glowTex('#ff3b3b'), blue: glowTex('#4aa3ff'), crown: crownTex() }), [])
+  const boltMesh = useRef()
+  const crown = useRef()
   const frame = useRef(0)
 
   useLayoutEffect(() => {
@@ -1141,9 +1478,7 @@ export default function Rivals() {
       // the squad rallies to you (again after Agent Army); Dan comes to heel
       if (!S.started) {
         S.started = true
-        S.students.forEach((s, i) => {
-          if (i < S.squad && !s.on) spawnStudent(s, p)
-        })
+        recruit(STUDENTS, p)
         if (!dan.placed) Object.assign(dan, { x: DAN.x, z: DAN.z, yaw: DAN.yaw, placed: true })
       }
 
@@ -1165,17 +1500,21 @@ export default function Rivals() {
           S.wave += 1
           S.toSpawn = 6 + S.wave * 4 // a bigger Yale squad needs a bigger Harvard horde
           S.interlude = 4
-          S.thiefSent = false
-          if (st.labubuStolen) chat.set({ labubuStolen: false }) // Zaman got a new one
+          S.thievesLeft = Math.min(S.wave, S.toSpawn) // wave N sends N Labubu thieves
+          S.bossDue = S.wave % BOSS_EVERY === 0 ? S.wave / BOSS_EVERY : 0
           chat.set({ wave: S.wave })
           banner(S.wave === 1 ? '🧟 Harvard zombies are in the cloister! Defend Evans Hall!' : `🧟 Wave ${S.wave}: Harvard sends ${S.toSpawn} more`)
         }
       }
       if (S.toSpawn > 0) {
         S.spawnT -= dt
-        const thief = S.wave >= 2 && !S.thiefSent && !st.labubuStolen && ZAMAN.ready
-        if (S.spawnT <= 0 && spawnZombie(p, thief)) {
-          if (thief) S.thiefSent = true
+        // thieves are spread through the wave
+        const thief = ZAMAN.ready && S.thievesLeft > 0 && Math.random() < S.thievesLeft / S.toSpawn
+        // the boss arrives a few zombies into its wave
+        const boss = S.bossDue && S.toSpawn <= Math.max(1, (6 + S.wave * 4) - 3) ? S.bossDue : 0
+        if (S.spawnT <= 0 && boss && spawnZombie(p, false, { boss })) S.bossDue = 0
+        else if (S.spawnT <= 0 && spawnZombie(p, thief)) {
+          if (thief) S.thievesLeft -= 1
           S.toSpawn -= 1
           S.spawnT = 0.6
         }
@@ -1206,6 +1545,7 @@ export default function Rivals() {
           killZombie(z)
           continue
         }
+        if (z.boss && z.stun > 0.4) z.stun = 0.4 // bosses shake off stuns
         if (z.stun > 0) {
           z.stun -= dt
           z.moving = z.attacking = false
@@ -1243,33 +1583,19 @@ export default function Rivals() {
           z.y = floorAt(z.x, z.z)
           continue
         }
-        if (z.thief) {
-          // the Labubu heist: follow the route in, grab it, follow the route back out
-          const th = z.thief
-          const wp = th.path[th.i]
-          const tx = wp ? wp[0] : ZAMAN.x
-          const tz = wp ? wp[1] : ZAMAN.z
-          const d = step(z, tx, tz, zSpeed * (th.carrying ? 1.5 : 1.25), dt, wp ? 0 : 0.6)
-          z.attacking = false
-          if (d < 0.45 || (!wp && d <= 0.7)) {
-            if (th.i < th.path.length - 1) th.i += 1
-            else if (!th.carrying) {
-              th.carrying = true
-              S.labubuT = LABUBU_TIME
-              chat.set({ labubuStolen: true })
-              banner(`😱 The zombie grabbed Prof. Zaman’s Labubu! Get it back in ${LABUBU_TIME} seconds or Harvard wins!`, 4000)
-              sfx.stinger(true) // the alarm
-              // escape route: back out the door, then the far side of the cloister from you
-              th.path = [ZAMAN_ROOM.inner, ZAMAN_ROOM.outer, ...fleePath(ZAMAN_ROOM.ring, p)]
-              th.i = 0
-            } else {
-              // reached the far side: keep running, away from you again
-              th.path = fleePath(nearestRing([z.x, z.z]), p)
-              th.i = 0
-            }
-          }
+        if (z.thief && thiefStep(z, p, zSpeed, dt)) {
           z.y = floorAt(z.x, z.z)
           continue
+        }
+        if (z.boss) {
+          bossPowers(z, p, dt)
+          if (z.boss.dash > 0) {
+            z.boss.dash -= dt
+            step(z, p.x, p.z, zSpeed * 4, dt, REACH * z.scale)
+            if (dist(z, p) <= REACH * z.scale) hurtPlayer(20 * dt + 12 * dt * z.boss.tier)
+            z.y = floorAt(z.x, z.z)
+            continue
+          }
         }
         z.age += dt
         z.retarget -= dt
@@ -1307,23 +1633,15 @@ export default function Rivals() {
           continue
         }
         const tg = z.target
-        const d = navTo(z, tg.x, tg.z, zSpeed, dt, REACH * 0.9)
+        const reach = REACH * (z.scale || 1)
+        const brute = z.boss ? 1.6 + z.boss.tier * 0.25 : 1 // bosses hit harder
+        const d = navTo(z, tg.x, tg.z, zSpeed * (z.boss ? 0.85 : 1), dt, reach * 0.9)
         unstick(z, dt)
-        z.attacking = d <= REACH
+        z.attacking = d <= reach
         if (z.attacking) {
-          if (tg === p) {
-            // the shield soaks damage first
-            let dmg = PLAYER_DPS * dt
-            const soak = Math.min(S.shield, dmg)
-            S.shield -= soak
-            dmg -= soak
-            S.hp -= dmg
-            if (S.hurtT <= 0) {
-              sfx.hurt() // you got hit (at most twice a second, not a constant buzz)
-              S.hurtT = 0.5
-            }
-          } else {
-            tg.hp -= CLAW_DPS * dt
+          if (tg === p) hurtPlayer(PLAYER_DPS * brute * dt) // (sound at most twice a second)
+          else {
+            tg.hp -= CLAW_DPS * brute * dt
             tg.flash = 0.15
             if (tg.ally > 0 && tg.hp <= 0) tg.ally = 0.001 // an ally that's clawed down collapses
           }
@@ -1364,7 +1682,11 @@ export default function Rivals() {
         s.flash = Math.max(0, (s.flash || 0) - dt)
         if (s.down) {
           s.downT += dt
-          if (s.downT > KO_TIME) spawnStudent(s, p, false) // back on their feet, somewhere in the halls
+          if (s.downT > KO_TIME) {
+            s.on = false // gone for good: recruit replacements at Admissions
+            s.target = null
+            pushHud()
+          }
           continue
         }
         if (s.hp <= 0) {
@@ -1564,11 +1886,45 @@ export default function Rivals() {
         }
       }
 
-      // the Labubu clock: if Harvard still has it when time runs out, the game is over
+      // boss bolts: fly straight, stop at walls, hurt whoever they hit
+      S.bolts = S.bolts.filter((b) => {
+        b.x += b.vx * dt
+        b.z += b.vz * dt
+        if ((b.left -= dt) <= 0 || wallAt(b.x, b.z, b.y)) return false
+        if (Math.hypot(b.x - p.x, b.z - p.z) < 0.6) {
+          hurtPlayer(b.dmg)
+          return false
+        }
+        const s = S.students.find((q) => q.on && !q.down && Math.hypot(b.x - q.x, b.z - q.z) < 0.5)
+        if (s) {
+          s.hp -= 2
+          s.flash = 0.3
+          return false
+        }
+        return true
+      })
+
+      // the dropped Labubu: walk over it to pick it up, then bring it to Prof. Zaman
+      if (LAB.state === 'dropped' && Math.hypot(p.x - LAB.x, p.z - LAB.z) < 1.4) {
+        LAB.state = 'player'
+        banner('🧸 You’ve got the Labubu! Run it back to Prof. Zaman in room 2200, and don’t let a thief touch you!', 3600)
+        pushHud()
+      }
+      if (LAB.state === 'player' && Math.hypot(p.x - ZAMAN.x, p.z - ZAMAN.z) < 2.6) {
+        LAB.state = 'home'
+        S.labubuT = 0
+        S.endowment += 500
+        chat.set({ labubuStolen: false })
+        banner('💗 The Labubu is back with Prof. Zaman! +$500', 3000)
+        sfx.coin()
+        pushHud()
+      }
+
+      // the Labubu clock: if it isn't back with Prof. Zaman when time runs out, the game is over
       let lost = false
       if (S.labubuT > 0) {
         S.labubuT = Math.max(0, S.labubuT - dt)
-        if (S.labubuT === 0) {
+        if (S.labubuT === 0 && LAB.state !== 'home') {
           lost = true
           sfx.stinger(true)
         }
@@ -1587,16 +1943,40 @@ export default function Rivals() {
     S.students.forEach((s, i) => poseAgent(sm, STUDENT, i, s, t, 's'))
     for (const mesh of [...zm, ...sm]) mesh.instanceMatrix.needsUpdate = true
 
-    // the Labubu in the thief's arms, and a red beacon over the thief so you can find it
-    const thief = S.zombies.find((z) => z.on && !z.down && z.thief)
-    thiefMark.current.visible = !!thief
-    thiefLabubu.current.visible = !!thief?.thief.carrying
-    if (thief) {
-      thiefMark.current.position.set(thief.x, thief.y + 2.25 + Math.sin(t * 6) * 0.08, thief.z)
-      thiefMark.current.scale.setScalar(0.5 + Math.sin(t * 8) * 0.1)
-      thiefLabubu.current.position.set(thief.x + Math.sin(thief.yaw) * 0.3, thief.y + 1.05, thief.z + Math.cos(thief.yaw) * 0.3)
-      thiefLabubu.current.rotation.y = thief.yaw
+    // the Labubu: in the carrier's arms, or on the floor where the carrier fell, under a big red beacon.
+    // Every other thief gets a small red marker so you can see them coming.
+    const carrier = LAB.carrier
+    const showLab = LAB.state === 'carried' || LAB.state === 'dropped'
+    thiefMark.current.visible = showLab
+    thiefLabubu.current.visible = showLab
+    if (carrier) {
+      thiefMark.current.position.set(carrier.x, carrier.y + 2.25 + Math.sin(t * 6) * 0.08, carrier.z)
+      thiefLabubu.current.position.set(carrier.x + Math.sin(carrier.yaw) * 0.3, carrier.y + 1.05, carrier.z + Math.cos(carrier.yaw) * 0.3)
+      thiefLabubu.current.rotation.y = carrier.yaw
+    } else if (LAB.state === 'dropped') {
+      const fy = floorAt(LAB.x, LAB.z)
+      thiefMark.current.position.set(LAB.x, fy + 1.2 + Math.sin(t * 6) * 0.08, LAB.z)
+      thiefLabubu.current.position.set(LAB.x, fy + 0.05 + Math.abs(Math.sin(t * 3)) * 0.12, LAB.z)
+      thiefLabubu.current.rotation.y = t * 1.5
     }
+    thiefMark.current.scale.setScalar(0.5 + Math.sin(t * 8) * 0.1)
+    // the boss's crown, and its bolts in flight
+    const boss = S.zombies.find((z) => z.on && !z.down && z.boss)
+    crown.current.visible = !!boss
+    if (boss) crown.current.position.set(boss.x, boss.y + 2.05 * boss.scale + Math.sin(t * 3) * 0.06, boss.z)
+    for (let k = 0; k < MAX_BOLTS; k++) {
+      const b = S.bolts[k]
+      if (b) _m.compose(_pos.set(b.x, b.y, b.z), _quat.identity(), _one)
+      else _m.compose(_zero, _quat.identity(), _zero)
+      boltMesh.current.setMatrixAt(k, _m)
+    }
+    boltMesh.current.instanceMatrix.needsUpdate = true
+    const thieves = S.zombies.filter((z) => z.on && !z.down && z.thief && z !== carrier)
+    thiefMarks.current.forEach((m, k) => {
+      const z = thieves[k]
+      m.visible = !!z
+      if (z) m.position.set(z.x, z.y + 2.1 + Math.sin(t * 5 + k) * 0.05, z.z)
+    })
 
     // spell / bark / howl rings on the floor
     S.fx = S.fx.filter((f) => (f.life -= dt) > 0)
@@ -1649,6 +2029,7 @@ export default function Rivals() {
       let hitN = null
       let hitV = false
       let hitC = false
+      let hitA = false
       S.aim = null
       if (running && !st.talkingTo) {
         ray.setFromCamera(CENTER, camera)
@@ -1665,7 +2046,8 @@ export default function Rivals() {
           ray.far = NOTE_RANGE
           hitV = ray.intersectObject(vending.current, true).length > 0
           hitC = !hitV && ray.intersectObject(coffee.current, true).length > 0
-          if (!hitV && !hitC) {
+          hitA = !hitV && !hitC && ray.intersectObject(admissions.current, true).length > 0
+          if (!hitV && !hitC && !hitA) {
             const nh = ray.intersectObjects(notes.current.filter(Boolean), false)[0]
             if (nh) hitN = nh.object.userData.id
           }
@@ -1675,6 +2057,7 @@ export default function Rivals() {
       if (hitN !== st.note) chat.set({ note: hitN })
       if (hitV !== !!st.vending) chat.set({ vending: hitV })
       if (hitC !== !!st.coffee) chat.set({ coffee: hitC })
+      if (hitA !== !!st.admissions) chat.set({ admissions: hitA })
     }
   })
 
@@ -1700,10 +2083,19 @@ export default function Rivals() {
       <sprite ref={thiefMark} visible={false}>
         <spriteMaterial map={tex.red} transparent depthWrite={false} blending={THREE.AdditiveBlending} />
       </sprite>
+      {Array.from({ length: 12 }, (_, k) => (
+        <sprite key={k} ref={(el) => (thiefMarks.current[k] = el)} visible={false} scale={0.28}>
+          <spriteMaterial map={tex.red} transparent depthWrite={false} blending={THREE.AdditiveBlending} />
+        </sprite>
+      ))}
       <group ref={thiefLabubu} visible={false}>
         <Labubu height={0.32} expression="surprised" />
       </group>
       <instancedMesh ref={cardMesh} args={[CARD_GEO, CARD_MAT, 40]} frustumCulled={false} />
+      <instancedMesh ref={boltMesh} args={[BOLT_GEO, BOLT_MAT, MAX_BOLTS]} frustumCulled={false} />
+      <sprite ref={crown} visible={false} scale={0.6}>
+        <spriteMaterial map={tex.crown} transparent depthWrite={false} toneMapped={false} />
+      </sprite>
       <instancedMesh ref={thermosMesh} args={[THERMOS_GEO, THERMOS_MAT, 8]} frustumCulled={false} />
       {Array.from({ length: 6 }, (_, k) => (
         <sprite key={k} ref={(el) => (allyMarks.current[k] = el)} visible={false} scale={0.45}>
@@ -1712,6 +2104,7 @@ export default function Rivals() {
       ))}
       <VendingMachine innerRef={vending} />
       <CoffeeTable innerRef={coffee} />
+      <AdmissionsDesk innerRef={admissions} />
     </>
   )
 }

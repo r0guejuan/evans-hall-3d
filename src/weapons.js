@@ -6,7 +6,8 @@ export const MELEE = {
   briefcase: { name: 'Briefcase Bash', icon: '💼', price: 1500, damage: 4, range: 2.7, cooldown: 0.9, stun: 0.3, knock: 3, desc: 'Slow, heavy swing. Big damage and sends zombies flying.' },
 }
 
-export const SHURIKEN = { name: 'Business Card Shuriken', icon: '📇', price: 900, damage: 2, speed: 26, range: 30, cooldown: 0.3, pierce: 3, desc: 'Flick embossed cards. Fast, accurate, and they slice through up to 3 zombies.' }
+// sold by the box: each purchase is a box of `pack` cards
+export const SHURIKEN = { name: 'Business Card Shuriken', icon: '📇', price: 1000, pack: 25, damage: 2, speed: 26, range: 30, cooldown: 0.3, pierce: 3, desc: 'A box of 25 embossed cards. Fast, accurate, and each one slices through up to 3 zombies.' }
 
 // consumables: bought by the each; pick one on the weapon wheel, use it with L / right click
 export const ITEMS = {
@@ -19,5 +20,8 @@ export const THERMOS = { radius: 4, damage: 5, burn: 1.2, burnTime: 4, speed: 11
 export const TAKEOVER = { range: 16, time: 15 }
 export const CRASH = { time: 12, slow: 0.4, dps: 0.9 }
 
-// Endowment for each kill (plus a bonus for the Labubu thief)
-export const bounty = (wave, thief) => (thief ? 600 : 100 + wave * 20)
+// Endowment for each kill (plus a bonus for a Labubu thief, and a big one for a boss)
+export const bounty = (wave, thief, boss) => (boss ? 1500 * boss : thief ? 300 : 100 + wave * 20)
+
+// the Admissions desk (by the coffee table): fallen classmates are gone for good, so you recruit more
+export const ADMIT = { one: 500, five: 2250 }

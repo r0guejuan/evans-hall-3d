@@ -10,8 +10,8 @@ import TouchControls from './TouchControls.jsx'
 import ChatWindow from './ChatWindow.jsx'
 import WeaponWheel from './WeaponWheel.jsx'
 import { CHAT_PROFESSORS, chat, useChat } from './chat.js'
-import { COFFEE, DAN_LEVELS, RANGED, buy, canShop, drinkCoffee, meleeAttack, resetRivals, say, sicEm, startNextWave, useRanged } from './Rivals.jsx'
-import { ITEMS, MELEE, SHURIKEN } from './weapons.js'
+import { COFFEE, DAN_LEVELS, RANGED, buy, canShop, drinkCoffee, freeSeats, hire, meleeAttack, resetRivals, say, sicEm, startNextWave, useRanged } from './Rivals.jsx'
+import { ADMIT, ITEMS, MELEE, SHURIKEN } from './weapons.js'
 import * as sfx from './sfx.js'
 import { NOTES } from './notes.js'
 import { EYE, SPAWN } from './layout.js'
@@ -76,6 +76,7 @@ export default function App() {
   const note = useChat((s) => s.note)
   const vending = useChat((s) => s.vending)
   const coffee = useChat((s) => s.coffee)
+  const admissions = useChat((s) => s.admissions)
   const talkingTo = useChat((s) => s.talkingTo)
   // the fight
   const wave = useChat((s) => s.wave)
@@ -90,6 +91,9 @@ export default function App() {
   const danLevel = useChat((s) => s.danLevel) || 1
   const labubuIn = useChat((s) => s.labubuIn) || 0
   const labubuStolen = useChat((s) => s.labubuStolen)
+  const labubuState = useChat((s) => s.labubuState) || 'home'
+  const classmates = useChat((s) => s.classmates) ?? 0
+  const boss = useChat((s) => s.boss)
   const coffeeIn = useChat((s) => s.coffeeIn) || 0
   // the arsenal + the Endowment Office (shop)
   const endowment = useChat((s) => s.endowment) ?? 0
@@ -121,6 +125,16 @@ export default function App() {
     if (nextWave) startNextWave()
     resume()
   }
+  // Admissions (by the coffee table): recruit classmates, any time
+  const [admitOpen, setAdmitOpen] = useState(false)
+  const openAdmit = useCallback(() => {
+    setAdmitOpen(true)
+    release()
+  }, [])
+  const closeAdmit = () => {
+    setAdmitOpen(false)
+    resume()
+  }
   const openChat = useCallback((id) => {
     chat.set({ talkingTo: id, aiming: null })
     release() // free the mouse for typing
@@ -137,7 +151,7 @@ export default function App() {
     resume()
   }
 
-  const hud = playing && !talkingTo && !over && !reading && !shopOpen
+  const hud = playing && !talkingTo && !over && !reading && !shopOpen && !admitOpen
   useEffect(() => chat.set({ simRunning: hud }), [hud]) // the fight freezes while paused, chatting, reading, or shopping
   useEffect(() => {
     if (!hud) chat.set({ wheelOpen: false })
@@ -148,6 +162,7 @@ export default function App() {
   useEffect(() => {
     const interact = (st) => {
       if (st.coffee) return drinkCoffee(), true
+      if (st.admissions) return openAdmit(), true
       if (st.vending) return openShop(), true
       if (st.note != null) return openNote(st.note), true
       if (st.aiming) return openChat(st.aiming), true
@@ -183,13 +198,14 @@ export default function App() {
       window.removeEventListener('keydown', onInput)
       window.removeEventListener('contextmenu', noMenu)
     }
-  }, [openChat, openNote, openShop])
+  }, [openChat, openNote, openShop, openAdmit])
 
   // the one thing under the crosshair you can interact with (zombies win; you swing at those)
-  const target = zombie != null ? null : coffee ? 'coffee' : vending ? 'vending' : note != null ? 'note' : aiming ? 'prof' : null
+  const target = zombie != null ? null : coffee ? 'coffee' : admissions ? 'admissions' : vending ? 'vending' : note != null ? 'note' : aiming ? 'prof' : null
   const hint = {
     coffee: coffeeIn > 0 ? [`☕ The urn is refilling: ${coffeeIn}s`, null] : hp >= 100 ? ['☕ Coffee & snacks (you’re at full health)', null] : [`to grab coffee ☕ (+${COFFEE.heal} health)`, drinkCoffee],
     vending: ['to open the Endowment Office 🏛️', openShop],
+    admissions: ['to visit Admissions 🎓 (recruit classmates)', openAdmit],
     note: ['to read the study note 📜', () => openNote(note)],
     prof: [`to talk to ${CHAT_PROFESSORS[aiming]?.name}`, () => openChat(aiming)],
   }[target]
@@ -240,6 +256,7 @@ export default function App() {
         <div className="row">
           <span>🧟 Wave <b>{wave || 1}</b></span>
           <span>💀 <b>{kills || 0}</b> down</span>
+          <span title="Classmates fighting for you (recruit more at Admissions, by the coffee table)">🎓 <b>{classmates}</b> classmates</span>
           <span className="hpbar" role="meter" aria-label="Health" aria-valuenow={hp} aria-valuemin={0} aria-valuemax={100}>
             <span style={{ width: `${hp}%` }} />
             {shield > 0 && <span className="shield" style={{ width: `${Math.min(100, shield)}%` }} />}
@@ -253,7 +270,7 @@ export default function App() {
           {powerWeapon && <span>🗡️ {powerWeapon.name} {powerWeapon.left}s</span>}
           {shield > 0 && <span>🛡️ {shield}</span>}
           {slowed > 0 && <span>📚 slowed {slowed}s</span>}
-          {labubuStolen && <span className="alert">😱 Labubu stolen!</span>}
+          {labubuStolen && <span className="alert">{labubuState === 'player' ? '🧸 You have the Labubu!' : labubuState === 'dropped' ? '🧸 Labubu dropped!' : '😱 Labubu stolen!'}</span>}
         </div>
         <div className="row small loadout">
           <span className="cash">💰 ${endowment.toLocaleString()}</span>
@@ -287,9 +304,23 @@ export default function App() {
           📉 MARKET CRASH · HRVD ▼ {(12 - crash) * 7 + 9}% · {crash}s
         </div>
       )}
+      {boss && !over && playing && (
+        <div className="bossbar" role="meter" aria-label={`${boss.name} health`} aria-valuenow={boss.pct} aria-valuemin={0} aria-valuemax={100}>
+          <small>👑 {boss.name}</small>
+          <span>
+            <span style={{ width: `${boss.pct}%` }} />
+          </span>
+        </div>
+      )}
       {labubuIn > 0 && !over && (
-        <div className={labubuIn <= 10 ? 'labubuclock final' : 'labubuclock'} role="timer" aria-label={`${labubuIn} seconds to rescue the Labubu`}>
-          <small>Harvard escapes with the Labubu in</small>
+        <div className={labubuIn <= 10 ? 'labubuclock final' : 'labubuclock'} role="timer" aria-label={`${labubuIn} seconds to get the Labubu back`}>
+          <small>
+            {labubuState === 'player'
+              ? 'Get it back to Prof. Zaman (room 2200)'
+              : labubuState === 'dropped'
+                ? 'The Labubu is on the floor: grab it!'
+                : 'Harvard escapes with the Labubu in'}
+          </small>
           <b>
             {Math.floor(labubuIn / 60)}:{String(labubuIn % 60).padStart(2, '0')}
           </b>
@@ -324,6 +355,7 @@ export default function App() {
             <div className="mstats">
               <span>🧟 <b>{wave || 1}</b></span>
               <span>💀 <b>{kills || 0}</b></span>
+              <span>🎓 <b>{classmates}</b></span>
               <span className="hpbar" role="meter" aria-label="Health" aria-valuenow={hp} aria-valuemin={0} aria-valuemax={100}>
                 <span style={{ width: `${hp}%` }} />
                 {shield > 0 && <span className="shield" style={{ width: `${Math.min(100, shield)}%` }} />}
@@ -339,7 +371,7 @@ export default function App() {
             </button>
           </div>
           <div className="mchips">
-            {labubuStolen && <span className="alert">😱 Labubu stolen!</span>}
+            {labubuStolen && <span className="alert">{labubuState === 'player' ? '🧸 You have the Labubu!' : labubuState === 'dropped' ? '🧸 Labubu dropped!' : '😱 Labubu stolen!'}</span>}
             {powerWeapon && <span>🗡️ {powerWeapon.name} {powerWeapon.left}s</span>}
             {slowed > 0 && <span>📚 slowed {slowed}s</span>}
             {intermission > 0 && (
@@ -382,7 +414,7 @@ export default function App() {
                 ...Object.entries(MELEE)
                   .filter(([id]) => id !== 'wsj')
                   .map(([id, w]) => ({ id, ...w, kind: 'Melee', owned: !!inv[id] })),
-                { id: 'shuriken', ...SHURIKEN, kind: 'Long range', owned: !!inv.shuriken },
+                { id: 'cards', ...SHURIKEN, kind: `Long range · box of ${SHURIKEN.pack}`, count: inv.cards || 0 },
                 ...Object.entries(ITEMS).map(([id, it]) => ({ id, ...it, kind: 'Long range · pick it on the wheel', count: inv[id] || 0 })),
               ].map((it) => (
                 <div key={it.id} className={it.owned ? 'item owned' : 'item'}>
@@ -407,6 +439,42 @@ export default function App() {
               </button>
               <button className="go" onClick={() => closeShop(true)} autoFocus>
                 Start the next wave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {admitOpen && (
+        <div className="overlay notecard-wrap">
+          <div className="card shop" role="dialog" aria-label="Admissions">
+            <div className="kicker">🎓 Yale Admissions · open all night</div>
+            <h2>💰 ${endowment.toLocaleString()}</h2>
+            <p className="sub">
+              You have <b>{classmates}</b> classmate{classmates === 1 ? '' : 's'} fighting for you. Fallen classmates are gone for good, so recruit
+              replacements here. New recruits report in at this desk.
+            </p>
+            <div className="shopgrid">
+              {[
+                { n: 1, icon: '🧑‍🎓', name: 'Recruit a classmate', desc: 'One more Yale student in a Halloween costume, ready to hunt Harvard zombies.', price: ADMIT.one },
+                { n: 5, icon: '🎓', name: 'Recruit a study group', desc: 'Five classmates at once, at a group discount.', price: ADMIT.five },
+              ].map((it) => (
+                <div key={it.n} className="item">
+                  <div className="icon">{it.icon}</div>
+                  <div>
+                    <b>{it.name}</b>
+                    <small>{it.n === 1 ? 'one classmate' : `${it.n} classmates`}</small>
+                    <p>{it.desc}</p>
+                  </div>
+                  <button className="go" disabled={endowment < it.price || freeSeats() < it.n} onClick={() => hire(it.n)} aria-label={`${it.name} for $${it.price}`}>
+                    {freeSeats() < it.n ? 'Class is full' : `$${it.price.toLocaleString()}`}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="shopfoot">
+              <button className="go" onClick={closeAdmit} autoFocus>
+                Back to the fight
               </button>
             </div>
           </div>
@@ -468,8 +536,8 @@ export default function App() {
             <p className="rules">
               🧟 Harvard zombies are loose in Evans Hall, in growing waves. Fight with business school gear: kills earn <b>Endowment</b> to spend at the
               Endowment Office between waves, and Handsome Dan fights at your side. ⚡ Answer the professors' questions for <b>power-ups</b> (study notes with the
-              answers are hidden around the building). ☕ Hurt? Grab coffee at the <b>snack table</b> in the south cloister (☕ on the map). 😱 Don't let them steal the{' '}
-              <b>Labubu</b> off Prof. Zaman in room 2200: if Harvard still has it after 90 seconds, the game is over!
+              answers are hidden around the building). ☕ Hurt? Grab coffee at the <b>snack table</b> in the south cloister (☕ on the map); 🎓 <b>Admissions</b> is right next to it. Fallen classmates are gone for good, so recruit more there. 👑 Every 4th wave brings a <b>boss</b>. 😱 Don't let them steal the{' '}
+              <b>Labubu</b> off Prof. Zaman in room 2200! Every wave sends thieves after it. If one grabs it, drop the thief, pick up the Labubu, and bring it back to him within 90 seconds or the game is over.
             </p>
             <button className="go">{isTouch ? 'Tap to walk in' : 'Click to walk in'}</button>
             {!isTouch && (

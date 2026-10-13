@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { BEIN, BOUNDS, COURTYARD, DRUMS, LIBRARY, MEETING, STAIRS, arc } from './layout.js'
 import { DAN } from './HandsomeDan.jsx'
-import { COFFEE } from './Rivals.jsx'
+import { ADMISSIONS, COFFEE, LAB } from './Rivals.jsx'
 
 const PAD = 3
 const X0 = BOUNDS.xMin - PAD
@@ -91,6 +91,17 @@ export default function Minimap({ drawRef }) {
       g.textAlign = 'center'
       g.textBaseline = 'middle'
       g.fillText('☕', kx, ky)
+      const [ax, ay] = px(ADMISSIONS.x + 1.2, ADMISSIONS.z)
+      g.fillText('🎓', ax, ay)
+      // the Labubu, when it's away from Prof. Zaman: on the floor, or on a thief (you carrying it: no dot)
+      const lab = LAB.carrier ? [LAB.carrier.x, LAB.carrier.z] : LAB.state === 'dropped' ? [LAB.x, LAB.z] : null
+      if (lab) {
+        const [lx, ly] = px(...lab)
+        g.fillStyle = performance.now() % 600 < 300 ? '#ff2040' : '#ffd0d8'
+        g.beginPath()
+        g.arc(lx, ly, 5, 0, Math.PI * 2)
+        g.fill()
+      }
       // Handsome Dan
       const [dx, dy] = px(DAN.x, DAN.z)
       g.fillStyle = '#4a90ff'

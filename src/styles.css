@@ -1364,3 +1364,61 @@ body,
     height: 104px;
   }
 }
+
+/* ---------- boss health bar */
+.bossbar {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(380px, calc(100vw - 340px));
+  min-width: 200px;
+  text-align: center;
+  color: #ffd76a;
+  font: 700 13px Georgia, serif;
+  letter-spacing: 0.04em;
+  text-shadow: 0 0 6px #000;
+  pointer-events: none;
+  z-index: 7;
+}
+
+.bossbar > span {
+  display: block;
+  height: 10px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: rgba(40, 0, 6, 0.85);
+  border: 1px solid #ffd76a;
+  overflow: hidden;
+}
+
+.bossbar > span > span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #7a0010, #ff2030);
+  transition: width 0.15s;
+}
+
+.touchmode .bossbar {
+  top: calc(env(safe-area-inset-top) + 54px);
+  width: min(320px, calc(100vw - 32px));
+  font-size: 12px;
+}
+
+.touchmode .rivalsbanner {
+  top: calc(env(safe-area-inset-top) + 92px);
+}
+
+.touchmode .labubuclock {
+  top: calc(env(safe-area-inset-top) + 176px);
+}
+
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 520px) {
+  .touchmode .rivalsbanner {
+    top: calc(env(safe-area-inset-top) + 88px);
+  }
+
+  .touchmode .labubuclock {
+    top: calc(env(safe-area-inset-top) + 150px);
+  }
+}
