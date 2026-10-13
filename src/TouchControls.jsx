@@ -10,8 +10,9 @@ const capture = (el, id) => {
   }
 }
 
-// Phone controls: left thumb joystick to walk, drag anywhere else to look.
-export default function TouchControls({ touchRef, onPause }) {
+// Phone controls: left thumb joystick to walk, drag anywhere else to look. (Attack buttons and the
+// status strip live in App.jsx.)
+export default function TouchControls({ touchRef }) {
   const stickEl = useRef(null)
   const stickId = useRef(null)
   const lookId = useRef(null)
@@ -65,25 +66,7 @@ export default function TouchControls({ touchRef, onPause }) {
       <div ref={stickEl} className="stick" onPointerDown={stickDown} onPointerMove={stickMove} onPointerUp={stickUp} onPointerCancel={stickUp}>
         <div className="knob" style={{ transform: `translate(${knob[0]}px, ${knob[1]}px)` }} />
       </div>
-      <button
-        className="jump"
-        onPointerDown={(e) => {
-          e.stopPropagation()
-          touchRef.current.jump = true
-        }}
-      >
-        jump
-      </button>
-      <button
-        className="pause"
-        onPointerDown={(e) => {
-          e.stopPropagation()
-          onPause()
-        }}
-      >
-        pause
-      </button>
-      <div className="touchhint">left thumb walk · drag to look</div>
+      <div className="touchhint">left thumb walks · drag to look · big button hits</div>
     </div>
   )
 }

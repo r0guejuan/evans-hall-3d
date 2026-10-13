@@ -34,8 +34,9 @@ export default function App() {
   // phones have no pointer lock, so they get a joystick + drag-to-look instead
   const [isTouch] = useState(() => matchMedia('(pointer: coarse)').matches) // phones + tablets; touchscreen laptops still get mouse mode
   const [touchOn, setTouchOn] = useState(false)
-  const touchRef = useRef({ active: false, move: [0, 0], look: [0, 0], jump: false })
+  const touchRef = useRef({ active: false, move: [0, 0], look: [0, 0] })
   const setTouch = (on) => {
+    if (on) setShowMap(false) // phones: the map is a tap away, not in your face
     touchRef.current.active = on
     touchRef.current.move = [0, 0]
     setTouchOn(on)
@@ -51,6 +52,13 @@ export default function App() {
     else if (relock) lockRef.current?.() // the closing click counts as a gesture, so we can re-grab the mouse
   }
   const playing = locked || touchOn
+  // phone buttons act on touch-down: iOS drops "click"s while another finger (the joystick thumb) is down
+  const tap = (fn) => (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    sfx.start()
+    fn()
+  }
   // phone layout (styles.css: .touchmode): the status panel moves up out of the thumbs' way
   useEffect(() => {
     document.body.classList.toggle('touchmode', touchOn)
@@ -297,7 +305,7 @@ export default function App() {
       {hud && <div className={zombie != null ? 'crosshair on danger' : target ? 'crosshair on' : 'crosshair'} />}
       {hud && hint &&
         (touchOn ? (
-          <button className="talkhint tap" onClick={hint[1] || undefined} disabled={!hint[1]}>
+          <button className="talkhint tap" onPointerDown={hint[1] ? tap(hint[1]) : undefined} disabled={!hint[1]}>
             {hint[0]}
           </button>
         ) : (
@@ -307,23 +315,59 @@ export default function App() {
           </div>
         ))}
       {hud && touchOn && (
-        <div className="actionpad" aria-label="Attacks">
-          <button onClick={meleeAttack} aria-label="Melee swing">
-            {MELEE[melee].icon}
-          </button>
-          <button onClick={useRanged} aria-label={`Use ${RANGED[ranged]?.name}`} className={RANGED[ranged]?.have() ? '' : 'empty'}>
-            {RANGED[ranged]?.icon}
-            {RANGED[ranged]?.count() != null && <span className="ct">{RANGED[ranged].count()}</span>}
-          </button>
-          <button onClick={() => chat.set({ wheelOpen: true })} aria-label="Open the weapon wheel">
-            🎯
-          </button>
-          <button onClick={sicEm} aria-label="Sic 'em, Dan">
-            🐶
-          </button>
-        </div>
+        <>
+          {/* phones: one slim status strip across the top */}
+          <div className="mhud" aria-label="Fight status">
+            <button className="mbtn" onPointerDown={tap(() => setTouch(false))} aria-label="Pause">
+              ⏸
+            </button>
+            <div className="mstats">
+              <span>🧟 <b>{wave || 1}</b></span>
+              <span>💀 <b>{kills || 0}</b></span>
+              <span className="hpbar" role="meter" aria-label="Health" aria-valuenow={hp} aria-valuemin={0} aria-valuemax={100}>
+                <span style={{ width: `${hp}%` }} />
+                {shield > 0 && <span className="shield" style={{ width: `${Math.min(100, shield)}%` }} />}
+              </span>
+              <span className="cash">${endowment.toLocaleString()}</span>
+              <span>🐶 <b>{danLevel}</b></span>
+            </div>
+            <button className="mbtn" onPointerDown={tap(() => setShowMap((v) => !v))} aria-label={showMap ? 'Hide map' : 'Show map'}>
+              🗺️
+            </button>
+            <button className="mbtn" onPointerDown={tap(() => (sfx.setMuted(!muted), setMutedState(!muted)))} aria-label={muted ? 'Unmute sound' : 'Mute sound'}>
+              {muted ? '🔇' : '🔊'}
+            </button>
+          </div>
+          <div className="mchips">
+            {labubuStolen && <span className="alert">😱 Labubu stolen!</span>}
+            {powerWeapon && <span>🗡️ {powerWeapon.name} {powerWeapon.left}s</span>}
+            {slowed > 0 && <span>📚 slowed {slowed}s</span>}
+            {intermission > 0 && (
+              <button onPointerDown={tap(openShop)}>
+                🏛️ Shop · next wave {intermission}s
+              </button>
+            )}
+          </div>
+          {/* right thumb: a big attack button, throw beside it, wheel + Dan above */}
+          <div className="mpad">
+            <button className="attack" onPointerDown={tap(meleeAttack)} aria-label={`Swing the ${MELEE[melee].name}`}>
+              <span>{MELEE[melee].icon}</span>
+              <small>HIT</small>
+            </button>
+            <button className={RANGED[ranged]?.have() ? 'throw' : 'throw empty'} onPointerDown={tap(useRanged)} aria-label={`Use ${RANGED[ranged]?.name}`}>
+              <span>{RANGED[ranged]?.icon}</span>
+              <small>{RANGED[ranged]?.count() != null ? `×${RANGED[ranged].count()}` : 'THROW'}</small>
+            </button>
+            <button className="wheelbtn" onPointerDown={tap(() => chat.set({ wheelOpen: true }))} aria-label="Weapon wheel">
+              🎯
+            </button>
+            <button className="danbtn" onPointerDown={tap(sicEm)} aria-label="Sic 'em, Dan">
+              🐶
+            </button>
+          </div>
+        </>
       )}
-      {touchOn && !talkingTo && <TouchControls touchRef={touchRef} onPause={() => setTouch(false)} />}
+      {touchOn && !talkingTo && <TouchControls touchRef={touchRef} />}
       {talkingTo && <ChatWindow id={talkingTo} onClose={closeChat} />}
       <WeaponWheel />
 
@@ -443,8 +487,8 @@ export default function App() {
             {isTouch ? (
               <div className="keys">
                 <span><b>Left thumb</b> joystick to walk (push all the way to hurry)</span>
-                <span><b>Right thumb</b> drag to look</span>
-                <span><b>Round buttons</b> swing, throw, weapon wheel, sic Dan</span>
+                <span><b>Drag</b> anywhere else to look around</span>
+                <span><b>Right thumb</b> big button hits, the one beside it throws; 🎯 picks weapons, 🐶 sends Dan</span>
                 <span className="rotatetip">📱 Turn your phone sideways for the best view</span>
               </div>
             ) : (

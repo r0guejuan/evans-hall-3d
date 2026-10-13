@@ -6,15 +6,13 @@ import { EYE, MAX_STEP, SPAWN, collide, floorAt, locate } from './layout.js'
 import { chat } from './chat.js'
 
 const CROUCH_EYE = 1.05
-const JUMP_SPEED = 4.2
-const GRAVITY = 12
 const LOOK_SPEED = 0.005 // radians per touch pixel
 const TURN_SPEED = 2.2 // radians per second with ← →
 const TILT_SPEED = 1.4 // radians per second with ↑ ↓
 
 // PC controls: WASD move, arrow keys look (← → turn, ↑ ↓ tilt; the mouse works too), Shift sprint, C crouch.
-// Space is melee (see App.jsx), so jumping is touch-only; mouse look pauses while the weapon wheel is open.
-// Touch controls come in through touchRef: { active, move: [x, y], look: [dx, dy], jump }.
+// Space is melee (see App.jsx); mouse look pauses while the weapon wheel is open.
+// Touch controls come in through touchRef: { active, move: [x, y], look: [dx, dy] }.
 export default function Player({ lockRef, mapRef, touchRef, onLock, onWhere }) {
   const { camera, gl } = useThree()
   const controls = useMemo(() => new PointerLockControls(camera, gl.domElement), [camera, gl])
@@ -23,8 +21,6 @@ export default function Player({ lockRef, mapRef, touchRef, onLock, onWhere }) {
   const eye = useRef(EYE)
   const floorY = useRef(0)
   const devY = useRef(null) // dev teleport can pin the camera height
-  const jumpY = useRef(0)
-  const vy = useRef(0)
   const fwd = useMemo(() => new THREE.Vector3(), [])
   const euler = useMemo(() => new THREE.Euler(0, 0, 0, 'YXZ'), [])
 
@@ -137,18 +133,12 @@ export default function Player({ lockRef, mapRef, touchRef, onLock, onWhere }) {
       }
     }
 
-    // jump + crouch
-    const wantJump = touch.jump // the touch jump button (Space swings)
-    touch.jump = false
-    if (active && wantJump && jumpY.current === 0) vy.current = JUMP_SPEED
-    vy.current -= GRAVITY * dt
-    jumpY.current = Math.max(0, jumpY.current + vy.current * dt)
-    if (jumpY.current === 0) vy.current = 0
+    // crouch
     const eyeTarget = active && k.KeyC ? CROUCH_EYE : EYE
     eye.current += (eyeTarget - eye.current) * Math.min(1, dt * 12)
     const fy = floorAt(camera.position.x, camera.position.z)
     floorY.current += (fy - floorY.current) * Math.min(1, dt * 14) // smooth step up/down
-    camera.position.y = devY.current ?? floorY.current + eye.current + jumpY.current
+    camera.position.y = devY.current ?? floorY.current + eye.current
 
     if (import.meta.env.DEV) document.body.dataset.pos = `${camera.position.x.toFixed(2)},${camera.position.z.toFixed(2)},${fwd.x.toFixed(2)},${fwd.z.toFixed(2)}|${touch.move.map((v) => v.toFixed(2))}`
     mapRef.current?.(camera.position.x, camera.position.z, fwd.x, fwd.z)
