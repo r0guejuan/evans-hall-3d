@@ -23,8 +23,8 @@ export const TAKEOVER = { range: 16, time: 15 }
 export const CRASH = { time: 12, slow: 0.4, dps: 0.9 }
 
 // Endowment for each kill (plus a bonus for a Labubu thief, and a big one for a boss)
-// bosses pay big, so a player who takes them down can always make tuition: $10k, $18k, $26k, ...
-export const bounty = (wave, thief, boss) => (boss ? 2000 + 8000 * boss : thief ? 300 : 100 + wave * 20)
+// bosses pay a solid bonus toward tuition: $5k, $8k, $11k, ... (+$3k per tier)
+export const bounty = (wave, thief, boss) => (boss ? 2000 + 3000 * boss : thief ? 300 : 100 + wave * 20)
 
 // the Admissions desk (by the coffee table): fallen classmates are gone for good, so you recruit more
 export const ADMIT = { one: 500, five: 2250 }
