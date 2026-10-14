@@ -47,3 +47,26 @@ export const SUPERS = {
 }
 export const CANNON = { radius: 5, damage: 11, speed: 14 }
 export const SWAN = { time: 6, every: 0.4, range: 16, damage: 5, strikes: 3 }
+
+// ---------- the Deans: hero characters you can hire at Admissions. Tougher than classmates, they follow
+// you, fight, and each has a special ability. Overwhelmed? They're gone until you hire them again.
+export const HEROES = {
+  tsung: {
+    name: 'Assistant Dean Wendy Tsung',
+    short: 'Dean Tsung',
+    icon: '🌟',
+    price: 4000,
+    hp: 40,
+    punch: 1.6,
+    desc: 'Student Affairs Rally: every 8 seconds she heals the classmates around her, gets a fallen one back on their feet, and gives you +10 health.',
+  },
+  charles: {
+    name: 'Dean Kerwin Charles',
+    short: 'Dean Charles',
+    icon: '📊',
+    price: 6000,
+    hp: 60,
+    punch: 3,
+    desc: 'Economic Shock: when zombies crowd him, every 10 seconds a shockwave damages and stuns them all. The hardest hitter in Evans Hall.',
+  },
+}

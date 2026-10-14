@@ -126,8 +126,9 @@ const EPITAPHS = ['HARVARD\n1636–tonight', 'THE CRIMSON\nnever saw it\ncoming'
 // ---------- the SOM balloon sign (Yale-style marquee letters, Halloween colors) outside Prof. Zaman's room:
 // white block-letter frames packed with glossy orange and black balloons, and a garland of big and small
 // matte balloons cascading over the top and down the side
-const LH = 1.8 // letter height
-const SW = 0.42 // stroke width
+const LH = 2.5 // letter height: taller than you
+const SW = 0.5 // stroke width
+const SR = (LH - SW) / 4 // the S's two bowls meet in the middle
 const FD = 0.3 // frame depth
 const arcPts = (cx, cy, r, ry, a0, a1, step = 0.12) => {
   const out = []
@@ -141,13 +142,13 @@ const arcPts = (cx, cy, r, ry, a0, a1, step = 0.12) => {
 // each letter: a list of stroke centerlines, in meters (x right, y up, from the letter's bottom-left)
 const LETTERS = [
   // S: two arcs
-  { x: 0, strokes: [[...arcPts(0.62, LH * 0.745, 0.42, LH * 0.225, 0.35, Math.PI * 1.5), ...arcPts(0.62, LH * 0.275, 0.42, LH * 0.225, Math.PI / 2, -Math.PI * 0.82)]] },
+  { x: 0, strokes: [[...arcPts(0.66, LH - SW / 2 - SR, 0.46, SR, 0.35, Math.PI * 1.5), ...arcPts(0.66, SW / 2 + SR, 0.46, SR, Math.PI / 2, -Math.PI * 0.82)]] },
   // O: a tall ellipse
-  { x: 1.42, strokes: [arcPts(0.6, LH / 2, 0.42, LH / 2 - SW / 2, 0, Math.PI * 2, 0.1)] },
+  { x: 1.5, strokes: [arcPts(0.64, LH / 2, 0.44, LH / 2 - SW / 2, 0, Math.PI * 2, 0.1)] },
   // M
-  { x: 2.78, strokes: [[[0.2, SW * 0.05], [0.2, LH - SW / 2], [0.72, LH * 0.45], [1.24, LH - SW / 2], [1.24, SW * 0.05]]] },
+  { x: 2.92, strokes: [[[0.25, SW / 2], [0.25, LH - SW / 2], [0.8, LH * 0.45], [1.35, LH - SW / 2], [1.35, SW / 2]]] },
 ]
-const SIGN_W = 4.2
+const SIGN_W = 4.5
 
 function signLayout() {
   const walls = [] // white marquee-letter trays: { x, y, z, len, w, d, ang } boxes

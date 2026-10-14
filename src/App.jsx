@@ -10,8 +10,8 @@ import TouchControls from './TouchControls.jsx'
 import ChatWindow from './ChatWindow.jsx'
 import WeaponWheel from './WeaponWheel.jsx'
 import { CHAT_PROFESSORS, chat, useChat } from './chat.js'
-import { COFFEE, DAN_LEVELS, RANGED, buy, canShop, drinkCoffee, freeSeats, hire, meleeAttack, nextTraining, PUZZLE, solvePuzzle, train, resetRivals, say, sicEm, startNextWave, useRanged } from './Rivals.jsx'
-import { ADMIT, ITEMS, MELEE, SHURIKEN, TRAINING } from './weapons.js'
+import { COFFEE, DAN_LEVELS, RANGED, buy, canShop, drinkCoffee, freeSeats, hire, hireHero, meleeAttack, nextTraining, PUZZLE, solvePuzzle, train, resetRivals, say, sicEm, startNextWave, useRanged } from './Rivals.jsx'
+import { ADMIT, HEROES, ITEMS, MELEE, SHURIKEN, TRAINING } from './weapons.js'
 import * as sfx from './sfx.js'
 import { NOTES } from './notes.js'
 import { checkAnswer, makePuzzle } from './puzzles.js'
@@ -97,6 +97,7 @@ export default function App() {
   const classmates = useChat((s) => s.classmates) ?? 0
   const boss = useChat((s) => s.boss)
   const training = useChat((s) => s.train) || {}
+  const heroes = useChat((s) => s.heroes) || {}
   const coffeeIn = useChat((s) => s.coffeeIn) || 0
   // the arsenal + the Endowment Office (shop)
   const endowment = useChat((s) => s.endowment) ?? 0
@@ -288,6 +289,13 @@ export default function App() {
           <span title={DAN_LEVELS.slice(0, danLevel).map((l) => l.name).join(', ')}>
             🐶 Dan Lv <b>{danLevel}</b> {DAN_LEVELS.slice(0, danLevel).map((l) => l.icon).join('')}
           </span>
+          {Object.entries(heroes)
+            .filter(([, pct]) => pct > 0)
+            .map(([id, pct]) => (
+              <span key={id}>
+                {HEROES[id].icon} {HEROES[id].short} <b>{pct}%</b>
+              </span>
+            ))}
           {spells > 0 && <span>✨ ×{spells} spells</span>}
           {powerWeapon && <span>🗡️ {powerWeapon.name} {powerWeapon.left}s</span>}
           {shield > 0 && <span>🛡️ {shield}</span>}
@@ -394,6 +402,13 @@ export default function App() {
           </div>
           <div className="mchips">
             {labubuStolen && <span className="alert">{labubuState === 'player' ? '🧸 You have the Labubu!' : labubuState === 'dropped' ? '🧸 Labubu dropped!' : '😱 Labubu stolen!'}</span>}
+            {Object.entries(heroes)
+              .filter(([, pct]) => pct > 0)
+              .map(([id, pct]) => (
+                <span key={id}>
+                  {HEROES[id].icon} {HEROES[id].short} {pct}%
+                </span>
+              ))}
             {powerWeapon && <span>🗡️ {powerWeapon.name} {powerWeapon.left}s</span>}
             {slowed > 0 && <span>📚 slowed {slowed}s</span>}
             {intermission > 0 && (
@@ -493,6 +508,26 @@ export default function App() {
                   </button>
                 </div>
               ))}
+            </div>
+            <h3 className="shophead">🏛️ The Deans</h3>
+            <p className="sub">Hire a Dean to fight at your side. They follow you, hit hard, and each has a special ability.</p>
+            <div className="shopgrid">
+              {Object.entries(HEROES).map(([id, h]) => {
+                const onDuty = heroes[id] > 0
+                return (
+                  <div key={id} className={onDuty ? 'item owned' : 'item'}>
+                    <div className="icon">{h.icon}</div>
+                    <div>
+                      <b>{h.name}</b>
+                      <small>{onDuty ? `on duty · ${heroes[id]}% health` : `${h.hp} health`}</small>
+                      <p>{h.desc}</p>
+                    </div>
+                    <button className="go" disabled={onDuty || endowment < h.price} onClick={() => hireHero(id)} aria-label={`Hire ${h.name}`}>
+                      {onDuty ? 'On duty' : `$${h.price.toLocaleString()}`}
+                    </button>
+                  </div>
+                )
+              })}
             </div>
             <h3 className="shophead">🏋️ Classmate training</h3>
             <p className="sub">Upgrades every classmate, now and future. A new level opens after each boss (waves 4, 8, 12).</p>

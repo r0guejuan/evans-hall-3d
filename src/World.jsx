@@ -15,6 +15,7 @@ import { COURSE_KEYS, slideTex } from './slides.js'
 import { PottedPlants, Trees } from './Nature.jsx'
 import Rivals from './Rivals.jsx'
 import Decor from './Decor.jsx'
+import Heroes from './Heroes.jsx'
 import * as sfx from './sfx.js'
 import { rng } from './textures.js'
 
@@ -662,6 +663,7 @@ export default function World() {
       <HandsomeDan />
       <Rivals />
       <Decor />
+      <Heroes />
       <ShadowFlags M={M} />
     </>
   )

@@ -8,7 +8,7 @@ import { DAN } from './HandsomeDan.jsx'
 import { ZAMAN } from './Zaman.jsx'
 import Labubu from './Labubu.jsx'
 import { NOTES } from './notes.js'
-import { ADMIT, CANNON, CRASH, ITEMS, MELEE, PUZZLE_EVERY, SHURIKEN, SUPERS, SWAN, TAKEOVER, THERMOS, TRAINING, TRAIN_EVERY, bounty } from './weapons.js'
+import { ADMIT, CANNON, CRASH, HEROES, ITEMS, MELEE, PUZZLE_EVERY, SHURIKEN, SUPERS, SWAN, TAKEOVER, THERMOS, TRAINING, TRAIN_EVERY, bounty } from './weapons.js'
 import * as sfx from './sfx.js'
 
 // Rivals: the game. It's night in Evans Hall and Harvard zombies (crimson sweaters, white H) shamble through
@@ -388,6 +388,7 @@ const S = {
   bolts: [], // boss projectiles: { x, y, z, vx, vz, left, dmg }
   train: { gym: 0, boxing: 0, track: 0 }, // classmate training levels (weapons.js: TRAINING)
   swanT: 0, // seconds left of a Black Swan Event
+  heroes: Object.fromEntries(Object.keys(HEROES).map((id) => [id, { id, on: false, phase: Math.random() * 6 }])), // the Deans (weapons.js: HEROES)
   swanTick: 0,
   kills: 0,
   started: false,
@@ -455,6 +456,7 @@ function pushHud() {
     classmates: S.students.filter((s) => s.on && !s.down).length,
     train: { ...S.train },
     puzzle: PUZZLE.active ? PUZZLE.level : 0,
+    heroes: Object.fromEntries(Object.values(S.heroes).map((h) => [h.id, h.on && !h.down ? Math.max(1, Math.round((h.hp / HEROES[h.id].hp) * 100)) : 0])),
   }
   const cur = chat.get()
   const changed = Object.keys(hud).some((k) => JSON.stringify(cur[k]) !== JSON.stringify(hud[k]))
@@ -470,6 +472,7 @@ export function resetRivals() {
     wave: 0, toSpawn: 0, spawnT: 0, interlude: 1.5, hp: 100, shield: 0, spells: 0, weapon: null, slow: 0, labubuT: 0, thievesLeft: 0, bossDue: 0, bolts: [], train: { gym: 0, boxing: 0, track: 0 }, swanT: 0, swanTick: 0, kills: 0, started: false, fx: [],
     endowment: START_ENDOWMENT, inv: { briefcase: false, cards: 0, thermos: 1, takeover: 0, crash: 0, gavel: false, cannon: 0, swan: 0, endowment: 0 }, melee: 'wsj', ranged: 'thermos', cool: { melee: 0, card: 0, sic: 0 }, cards: [], thermoses: [], crash: 0, cleared: false, coffeeT: 0,
   })
+  for (const h of Object.values(S.heroes)) h.on = false
   Object.assign(S.dan, { cool: { bark: 0, charge: 0, howl: 0 }, level: 1, target: null, dash: 0 })
   Object.assign(LAB, { state: 'home', carrier: null })
   Object.assign(PUZZLE, { active: false, level: 0, solved: 0 })
@@ -775,6 +778,18 @@ function recruit(n, p, at) {
   }
   pushHud()
   return added
+}
+// the Deans: one of each, hired at Admissions; they report in at the desk
+export function hireHero(id) {
+  const H = HEROES[id]
+  const h = S.heroes[id]
+  if (!H || (h.on && !h.down) || S.endowment < H.price) return false
+  S.endowment -= H.price
+  Object.assign(h, { on: true, down: false, downT: 0, hp: H.hp, x: ADMISSIONS.x + 0.8, z: ADMISSIONS.z + 1.8, y: 0, yaw: 0, moving: false, attacking: false, cool: 0, flash: 0, target: null, abilityT: 3, ...navInit() })
+  sfx.coin()
+  banner(`${H.icon} ${H.name} joins the fight!`, 2600)
+  pushHud()
+  return true
 }
 export function hire(n) {
   const price = n === 5 ? ADMIT.five : ADMIT.one * n
@@ -1861,6 +1876,14 @@ export default function Rivals() {
               best = s
             }
           }
+          for (const h of Object.values(S.heroes)) {
+            if (!h.on || h.down) continue
+            const d = dist(z, h)
+            if (d < bd) {
+              bd = d
+              best = h
+            }
+          }
           for (const o of S.zombies) {
             if (!(o.on && !o.down && o.ally > 0)) continue // traitors are fair game too
             const d = dist(z, o)
@@ -2006,6 +2029,90 @@ export default function Rivals() {
               who.x = _p.x
               who.z = _p.z
             }
+          }
+        }
+      }
+
+      // the Deans: fight anything near them (or near you), otherwise walk with you; each has a special ability
+      for (const h of Object.values(S.heroes)) {
+        if (!h.on) continue
+        const H = HEROES[h.id]
+        h.flash = Math.max(0, (h.flash || 0) - dt)
+        if (h.down) {
+          if ((h.downT += dt) > 3) {
+            h.on = false
+            pushHud()
+          }
+          continue
+        }
+        if (h.hp <= 0) {
+          Object.assign(h, { down: true, downT: 0, moving: false, attacking: false })
+          banner(`${H.icon} ${H.name} was overwhelmed! Hire them again at Admissions.`, 3200)
+          pushHud()
+          continue
+        }
+        if (dist(h, p) > 30) Object.assign(h, { x: p.x, z: p.z, ri: null }) // got lost: catch up
+        if (h.target && (!hostile(h.target) || dist(h.target, h) > 18)) h.target = null
+        if (!h.target) {
+          let bd = 14
+          for (const z of live) {
+            const d = Math.min(dist(z, h), dist(z, p) + 2)
+            if (d < bd) {
+              bd = d
+              h.target = z
+            }
+          }
+        }
+        if (h.target) {
+          const d = navTo(h, h.target.x, h.target.z, 3.0, dt, REACH * 0.85)
+          h.attacking = d <= REACH
+          h.cool -= dt
+          if (h.attacking && h.cool <= 0) {
+            h.target.hp -= H.punch
+            h.target.flash = 0.2
+            h.cool = 0.8
+          }
+        } else {
+          // walk with you, a couple of meters off to the side
+          h.attacking = false
+          const side = h.id === 'tsung' ? 1 : -1
+          const tx = p.x - S.fwd.z * 2.2 * side - S.fwd.x * 1.2
+          const tz = p.z + S.fwd.x * 2.2 * side - S.fwd.z * 1.2
+          if (Math.hypot(tx - h.x, tz - h.z) > 1.2) navTo(h, tx, tz, dist(h, p) > 8 ? 4.5 : 2.6, dt, 0.6)
+          else h.moving = false
+        }
+        unstick(h, dt)
+        h.y = floorAt(h.x, h.z)
+        // special abilities
+        if ((h.abilityT -= dt) <= 0) {
+          if (h.id === 'tsung') {
+            // Student Affairs Rally: heal everyone nearby, get a fallen classmate back up, top you up
+            h.abilityT = 8
+            let helped = false
+            for (const s of S.students) {
+              if (!s.on || dist(s, h) > 8) continue
+              if (s.down) {
+                if (!helped) {
+                  Object.assign(s, { down: false, downT: 0, hp: classmateHp() })
+                  helped = true
+                }
+              } else s.hp = classmateHp()
+            }
+            if (dist(h, p) < 8) S.hp = Math.min(100, S.hp + 10)
+            S.fx.push({ x: h.x, z: h.z, r: 8, life: 0.8, max: 0.8, color: '#7dffb0' })
+          } else if (h.id === 'charles') {
+            // Economic Shock: only worth it when they're crowding him
+            const near = live.filter((z) => dist(z, h) < 6)
+            if (near.length >= 2) {
+              h.abilityT = 10
+              for (const z of near) {
+                z.hp -= z.boss ? 15 : 8
+                z.stun = Math.max(z.stun || 0, 1.5)
+                z.flash = 0.4
+              }
+              S.fx.push({ x: h.x, z: h.z, r: 6, life: 0.8, max: 0.8, color: '#ffd76a' })
+              sfx.boom()
+            } else h.abilityT = 1
           }
         }
       }
