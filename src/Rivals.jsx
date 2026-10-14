@@ -390,7 +390,7 @@ const S = {
   swanT: 0, // seconds left of a Black Swan Event
   blasterOwned: false, // the easter egg (weapons.js: BLASTER)
   blasterCharge: 0, // fractional charges (inv.blaster is the whole shots, for the HUD)
-  blasts: [], // Bulldog Blaster bolts in flight
+  blasts: [], // Ticker Tape Blaster arrows in flight
   heroes: Object.fromEntries(Object.keys(HEROES).map((id) => [id, { id, on: false, phase: Math.random() * 6 }])), // the Deans (weapons.js: HEROES)
   swanTick: 0,
   kills: 0,
@@ -582,12 +582,12 @@ export function throwThermos() {
 // ---------- the easter egg: the MGT 409 poster on the east cloister wall (a big Y on its tiles)
 export const POSTER = { x: EAST - 0.15, y: 2.3, z: 14.8, w: 3.2, h: 3.6 }
 export function unlockBlaster() {
-  if (S.blasterOwned) return banner('🔫 You already have the Bulldog Blaster.', 2000)
+  if (S.blasterOwned) return banner('📈 You already have the Ticker Tape Blaster.', 2000)
   S.blasterOwned = true
   S.inv.blaster = S.blasterCharge = BLASTER.charges
   S.ranged = 'blaster'
   sfx.coin()
-  banner('🔫 EASTER EGG! Boola boola: you found the Bulldog Blaster. It recharges on its own (L / right click).', 5000)
+  banner('📈 EASTER EGG! Boola boola: you found the Ticker Tape Blaster. Bull market! It recharges on its own (L / right click).', 5000)
   pushHud()
 }
 export function fireBlaster() {
@@ -737,7 +737,7 @@ export const RANGED = {
   // super weapons (from the Case Competition puzzles)
   cannon: { name: 'Money Cannon', icon: '💸', have: () => S.inv.cannon > 0, count: () => S.inv.cannon, use: () => fireCannon() },
   swan: { name: 'Black Swan Event', icon: '🦢', have: () => S.inv.swan > 0, count: () => S.inv.swan, use: () => blackSwan() },
-  blaster: { name: 'Bulldog Blaster', icon: '🔫', have: () => S.blasterOwned && S.inv.blaster >= 1, count: () => (S.blasterOwned ? S.inv.blaster : 0), use: () => fireBlaster() },
+  blaster: { name: 'Ticker Tape Blaster', icon: '📈', have: () => S.blasterOwned && S.inv.blaster >= 1, count: () => (S.blasterOwned ? S.inv.blaster : 0), use: () => fireBlaster() },
   endowment: { name: 'The Endowment', icon: '🏛️', have: () => S.inv.endowment > 0, count: () => S.inv.endowment, use: () => unleashEndowment() },
 }
 export function useRanged() {
@@ -1375,8 +1375,12 @@ function emojiTex(ch) {
 }
 const BOLT_GEO = new THREE.SphereGeometry(0.17, 12, 8)
 const BOLT_MAT = new THREE.MeshStandardMaterial({ color: '#7a0010', emissive: '#ff2030', emissiveIntensity: 5 })
-const BLAST_GEO = new THREE.CapsuleGeometry(0.05, 0.4, 4, 8).rotateX(Math.PI / 2)
-const BLAST_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 1.4, 3.6), toneMapped: false }) // Yale blue, glowing
+// Ticker Tape Blaster shots: a glowing green up-arrow ("▲", the stock is up) pointing the way it flies...
+const BLAST_GEO = new THREE.ConeGeometry(0.11, 0.24, 3).rotateX(Math.PI / 2)
+const BLAST_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 3.2, 1.0), toneMapped: false })
+// ...trailing a strip of ticker tape
+const TAPE_GEO = new THREE.BoxGeometry(0.06, 0.006, 0.5).translate(0, 0, -0.35)
+const TAPE_MAT = new THREE.MeshStandardMaterial({ color: '#f3efe2', roughness: 0.9, emissive: '#3a3a30', emissiveIntensity: 0.4 })
 
 function glowTex(color) {
   const c = document.createElement('canvas')
@@ -1718,6 +1722,7 @@ export default function Rivals() {
   const tex = useMemo(() => ({ paper: paperTex(), red: glowTex('#ff3b3b'), blue: glowTex('#4aa3ff'), crown: emojiTex('👑'), quiz: emojiTex('❓'), gold: glowTex('#ffd76a') }), [])
   const boltMesh = useRef()
   const blastMesh = useRef()
+  const tapeMesh = useRef()
   const posterHit = useRef()
   const crown = useRef()
   const puzzle = useRef()
@@ -2232,7 +2237,7 @@ export default function Rivals() {
         }
         return (c.left -= dt) > 0 && !wallAt(c.x, c.z, c.y) // stops at a wall, sails over benches
       })
-      // Bulldog Blaster: recharges on its own; bolts fly straight and fast, through up to 2 zombies
+      // Ticker Tape Blaster: recharges on its own; arrows fly straight and fast, through up to 2 zombies
       if (S.blasterOwned && S.blasterCharge < BLASTER.charges) {
         S.blasterCharge = Math.min(BLASTER.charges, S.blasterCharge + dt / BLASTER.recharge)
         S.inv.blaster = Math.floor(S.blasterCharge)
@@ -2436,15 +2441,16 @@ export default function Rivals() {
       cardMesh.current.setMatrixAt(k, _o.matrix)
     })
     cardMesh.current.instanceMatrix.needsUpdate = true
-    blastMesh.current.count = S.blasts.length
+    blastMesh.current.count = tapeMesh.current.count = S.blasts.length
     S.blasts.forEach((b, k) => {
       _o.position.set(b.x, b.y, b.z)
-      _o.rotation.set(0, Math.atan2(b.vx, b.vz), 0)
+      _o.rotation.set(0, Math.atan2(b.vx, b.vz), Math.sin(t * 30 + k) * 0.3) // the tape flutters
       _o.scale.set(1, 1, 1)
       _o.updateMatrix()
       blastMesh.current.setMatrixAt(k, _o.matrix)
+      tapeMesh.current.setMatrixAt(k, _o.matrix)
     })
-    blastMesh.current.instanceMatrix.needsUpdate = true
+    blastMesh.current.instanceMatrix.needsUpdate = tapeMesh.current.instanceMatrix.needsUpdate = true
     thermosMesh.current.count = S.thermoses.length
     S.thermoses.forEach((g, k) => {
       _o.position.set(g.x, g.y, g.z)
@@ -2537,6 +2543,7 @@ export default function Rivals() {
       <instancedMesh ref={cardMesh} args={[CARD_GEO, CARD_MAT, 40]} frustumCulled={false} />
       <instancedMesh ref={boltMesh} args={[BOLT_GEO, BOLT_MAT, MAX_BOLTS]} frustumCulled={false} />
       <instancedMesh ref={blastMesh} args={[BLAST_GEO, BLAST_MAT, 30]} frustumCulled={false} />
+      <instancedMesh ref={tapeMesh} args={[TAPE_GEO, TAPE_MAT, 30]} frustumCulled={false} />
       {/* an invisible stand-in for the MGT 409 poster, so you can aim at it (the easter egg) */}
       <mesh ref={posterHit} position={[POSTER.x - 0.02, POSTER.y, POSTER.z]} rotation={[0, -Math.PI / 2, 0]}>
         <planeGeometry args={[POSTER.w, POSTER.h]} />

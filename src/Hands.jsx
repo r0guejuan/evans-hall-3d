@@ -23,9 +23,35 @@ const M = {
   card: onTop('#f7f5ef', { roughness: 0.4 }),
   steel: onTop('#b9bec6', { metalness: 0.85, roughness: 0.3 }),
   red: onTop('#b3262e'),
-  blaster: onTop('#00356b', { metalness: 0.5, roughness: 0.35 }),
-  blasterGlow: onTop('#7fb2ff', { emissive: '#4a90ff', emissiveIntensity: 4 }),
+  ticker: onTop('#1b1d22', { metalness: 0.4, roughness: 0.4 }),
+  tickerTrim: onTop('#00356b', { metalness: 0.5, roughness: 0.35 }),
+  tape: onTop('#f3efe2', { roughness: 0.9 }),
 }
+// the Ticker Tape Blaster's LED screen: quotes scrolling right to left
+const TICKER_TEX = (() => {
+  const c = document.createElement('canvas')
+  c.width = 1024
+  c.height = 64
+  const g = c.getContext('2d')
+  g.fillStyle = '#050805'
+  g.fillRect(0, 0, 1024, 64)
+  g.font = 'bold 40px ui-monospace, Menlo, monospace'
+  g.textBaseline = 'middle'
+  let x = 10
+  for (const [sym, up, pct] of [['YALE', true, '4.2%'], ['HRVD', false, '12.9%'], ['SOM', true, '9.0%'], ['BOOLA', true, '6.4%'], ['CRMSN', false, '8.1%']]) {
+    g.fillStyle = up ? '#39ff7a' : '#ff3b4a'
+    const t = `${sym} ${up ? '▲' : '▼'}${pct}   `
+    g.fillText(t, x, 34)
+    x += g.measureText(t).width
+  }
+  const t = new THREE.CanvasTexture(c)
+  t.colorSpace = THREE.SRGBColorSpace
+  t.wrapS = THREE.RepeatWrapping
+  t.repeat.set(0.45, 1)
+  return t
+})()
+const TICKER_SCREEN = new THREE.MeshBasicMaterial({ map: TICKER_TEX, depthTest: false, depthWrite: false, toneMapped: false })
+const PLANE = new THREE.PlaneGeometry(1, 1)
 const CYL = new THREE.CylinderGeometry(1, 1, 1, 14)
 const BOX = new THREE.BoxGeometry(1, 1, 1)
 const SPH = new THREE.SphereGeometry(1, 16, 12)
@@ -72,6 +98,7 @@ export default function Hands() {
   }, [target])
 
   useFrame(({ clock }, dt) => {
+    TICKER_TEX.offset.x = (TICKER_TEX.offset.x + dt * 0.12) % 1 // quotes scroll by
     const t = clock.elapsedTime
     const now = performance.now()
     // bob with walking speed
@@ -185,12 +212,14 @@ export default function Hands() {
             <P g={CYL} m={M.red} p={[0, 0.06, 0]} s={[0.045, 0.015, 0.045]} />
           </group>
           {blaster && (
-            // the Bulldog Blaster: a chunky Yale-blue ray gun with a glowing tip
-            <group position={[0.0, 0.05, -0.55]} rotation={[0.05, 0, 0.1]}>
-              <P m={M.blaster} s={[0.07, 0.08, 0.2]} />
-              <P g={CYL} m={M.steel} p={[0, 0.01, -0.14]} r={[Math.PI / 2, 0, 0]} s={[0.022, 0.12, 0.022]} />
-              <P g={CYL} m={M.blasterGlow} p={[0, 0.01, -0.21]} r={[Math.PI / 2, 0, 0]} s={[0.028, 0.02, 0.028]} />
-              <P m={M.blaster} p={[0, -0.07, 0.05]} r={[0.3, 0, 0]} s={[0.05, 0.1, 0.05]} />
+            // the Ticker Tape Blaster: a handheld stock ticker, held like a phone, with a scrolling LED
+            // quote screen on top and a spool of ticker tape feeding out the front
+            <group position={[0.02, 0.06, -0.5]} rotation={[1.0, 0.25, 0.1]}>
+              <P m={M.ticker} s={[0.17, 0.035, 0.11]} />
+              <P m={M.tickerTrim} p={[0, 0, 0.056]} s={[0.172, 0.037, 0.008]} />
+              <P g={PLANE} m={TICKER_SCREEN} p={[0, 0.0181, -0.008]} r={[-Math.PI / 2, 0, 0]} s={[0.15, 0.05, 1]} />
+              <P g={CYL} m={M.tape} p={[0.06, 0.03, 0.03]} s={[0.025, 0.02, 0.025]} />
+              <P m={M.tape} p={[0, 0.005, -0.075]} r={[0.25, 0, 0]} s={[0.03, 0.002, 0.05]} />
             </group>
           )}
           {thermos && (
