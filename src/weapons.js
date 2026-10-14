@@ -72,8 +72,8 @@ export const HEROES = {
 }
 
 // ---------- the easter egg: light up a big Y on the MGT 409 poster (east cloister) for the Ticker Tape
-// Blaster, a handheld stock ticker that fires glowing green up-arrows trailing ticker tape. 20 charges that
-// slowly refill, so it never runs dry but can't fire forever.
-export const BLASTER = { name: 'Ticker Tape Blaster', icon: '📈', damage: 2.5, speed: 40, range: 35, cooldown: 0.16, pierce: 2, charges: 20, recharge: 0.5 }
+// Blaster, a handheld stock ticker that fires glowing green up-arrows trailing ticker tape. 20 shots that
+// refill one every 9 seconds (3 minutes for a full load): a burst to save for when you need it.
+export const BLASTER = { name: 'Ticker Tape Blaster', icon: '📈', damage: 2.5, speed: 40, range: 35, cooldown: 0.16, pierce: 2, charges: 20, recharge: 9 } // 9 s per shot: a full recharge takes 3 minutes
 // the Y, on the poster's 5-column x 6-row grid of tiles (row-major, top row first)
 export const POSTER_Y = [0, 4, 6, 8, 12, 17, 22, 27]

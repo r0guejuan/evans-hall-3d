@@ -99,7 +99,7 @@ function rigParts(look) {
     { grp: 'body', g: CYL, m: L.pants, p: [0, 0.9, 0], s: [0.18, 0.14, 0.12], pants: true },
     { grp: 'body', g: CYL, m: L.skin, p: [0, 1.5, 0], s: [0.05, 0.08, 0.05], skin: true, hideFor: ['ghost', 'whiffenpoof'] },
     { grp: 'head', g: SPH, m: L.skin, p: [0, 0.13, 0], s: [0.105, 0.125, 0.11], skin: true, hit: true, hideFor: ['ghost', 'pumpkin', 'whiffenpoof'] },
-    { grp: 'head', g: SPH, m: L.hair, p: [0, 0.19, -0.012], s: [0.11, 0.075, 0.115], hair: true, hideFor: ['ghost', 'pumpkin', 'bulldog', 'whiffenpoof', 'mummy', 'quarterback', 'reaper'] },
+    { grp: 'head', g: SPH, m: L.hair, p: [0, 0.19, -0.012], s: [0.11, 0.075, 0.115], hair: true, hideFor: ['ghost', 'pumpkin', 'bulldog', 'whiffenpoof', 'mummy', 'quarterback', 'reaper', 'chef', 'mimic'] },
     ...[-1, 1].map((sx) => ({ grp: 'head', g: SPH, m: L.eye, p: [0.04 * sx, 0.145, 0.1], s: [0.017, 0.017, 0.01], hideFor: ['ghost', 'pumpkin', 'whiffenpoof', 'mummy', 'reaper'] })),
     ...['armL', 'armR'].flatMap((grp) => [
       { grp, g: CYL, m: L.shirt, p: [0, -0.24, 0], s: [0.055, 0.48, 0.055], shirt: true },
@@ -112,11 +112,13 @@ function rigParts(look) {
   ]
   if (look.letter === 'H') {
     // Harvard: white H on a crimson sweater, plus a grim little mouth
+    const noH = ['chef', 'mimic', 'bruiser']
     parts.push(
-      { grp: 'body', g: BOXG, m: L.white, p: [-0.045, 1.26, 0.133], s: [0.022, 0.15, 0.01] },
-      { grp: 'body', g: BOXG, m: L.white, p: [0.045, 1.26, 0.133], s: [0.022, 0.15, 0.01] },
-      { grp: 'body', g: BOXG, m: L.white, p: [0, 1.26, 0.133], s: [0.09, 0.022, 0.01] },
+      { grp: 'body', g: BOXG, m: L.white, p: [-0.045, 1.26, 0.133], s: [0.022, 0.15, 0.01], hideFor: noH },
+      { grp: 'body', g: BOXG, m: L.white, p: [0.045, 1.26, 0.133], s: [0.022, 0.15, 0.01], hideFor: noH },
+      { grp: 'body', g: BOXG, m: L.white, p: [0, 1.26, 0.133], s: [0.09, 0.022, 0.01], hideFor: noH },
       { grp: 'head', g: BOXG, m: L.dark, p: [0, 0.07, 0.105], s: [0.05, 0.014, 0.01] },
+      ...harvardParts(L),
     )
   } else {
     parts.push(...costumeParts(L))
@@ -129,6 +131,71 @@ function rigParts(look) {
       new THREE.Vector3(...pt.s),
     ),
   }))
+}
+
+// ---------- Harvard zombie types: each has a costume (parts below) and an ability (KINDS, in the AI)
+export const KINDS = {
+  freshman: { name: 'Harvard Freshman', shirt: '#a51c30', pants: '#5c5348', hp: 1, speed: 1, dmg: 1 },
+  sprinter: { name: 'Crimson Sprinter', shirt: '#b3152b', pants: '#8fa37a', hp: 0.6, speed: 1.8, dmg: 0.8, from: 2, share: 0.22 },
+  chef: { name: 'Hasty Pudding Chef', shirt: '#efece6', pants: '#3a3a3a', hp: 0.9, speed: 0.9, dmg: 0.8, from: 3, share: 0.16 },
+  bruiser: { name: 'Final Club Bruiser', shirt: '#5e0f1b', pants: '#2a2a2e', hp: 3, speed: 0.75, dmg: 2, scale: 1.28, from: 5, share: 0.1 },
+  mimic: { name: 'Mimic', shirt: '#00356b', pants: '#3b5a85', hp: 1, speed: 1, dmg: 1 }, // the Labubu thieves, disguised
+}
+const KIND_INTRO = {
+  sprinter: '🏃 Crimson Sprinters! Harvard track: fast, but they go down easy.',
+  chef: '🍮 Hasty Pudding Chefs lob puddings from range. Close the distance!',
+  bruiser: '💪 Final Club Bruisers: huge, slow, hit hard, and barely budge.',
+  mimic: '🎭 Labubu thieves disguise themselves as Yale students. Watch for the glowing green faces!',
+}
+function pickKind(wave) {
+  let r = Math.random()
+  for (const [id, k] of Object.entries(KINDS)) {
+    if (!k.share || wave < k.from) continue
+    if ((r -= k.share) < 0) return id
+  }
+  return 'freshman'
+}
+// costume parts for the Harvard types (shown only for that type)
+function harvardParts(L) {
+  const white = std('#f4f2ee')
+  const black = std('#151515')
+  const gold = std('#c9a44a', { metalness: 0.7, roughness: 0.35 })
+  const crimson = std('#a51c30')
+  const navy = std('#00356b')
+  const only = (c, list) => list.map((pt) => ({ ...pt, only: [c] }))
+  return [
+    // Crimson Sprinter: headband, black running shorts, a race bib
+    ...only('sprinter', [
+      { grp: 'head', g: CYL, m: white, p: [0, 0.18, 0], s: [0.113, 0.03, 0.118] },
+      { grp: 'body', g: CYL, m: black, p: [0, 0.86, 0], s: [0.19, 0.2, 0.135] },
+      ...['legL', 'legR'].map((grp) => ({ grp, g: CYL, m: black, p: [0, -0.1, 0], s: [0.078, 0.2, 0.078] })),
+      { grp: 'body', g: BOXG, m: white, p: [0, 1.12, 0.134], s: [0.13, 0.1, 0.008] },
+    ]),
+    // Hasty Pudding Chef: tall chef's hat, apron, red neckerchief
+    ...only('chef', [
+      { grp: 'head', g: CYL, m: white, p: [0, 0.3, -0.01], s: [0.1, 0.16, 0.1] },
+      { grp: 'head', g: SPH, m: white, p: [0, 0.4, -0.01], s: [0.13, 0.07, 0.13] },
+      { grp: 'body', g: BOXG, m: white, p: [0, 1.0, 0.13], s: [0.3, 0.62, 0.012] },
+      { grp: 'body', g: SPH, m: crimson, p: [0, 1.45, 0.08], s: [0.08, 0.035, 0.05] },
+    ]),
+    // Final Club Bruiser: blazer lapels, gold buttons, a crimson bow tie, a gold crest
+    ...only('bruiser', [
+      ...[-1, 1].map((sx) => ({ grp: 'body', g: BOXG, m: L.dark, p: [0.065 * sx, 1.3, 0.135], r: [0, 0, 0.3 * sx], s: [0.05, 0.26, 0.012] })),
+      { grp: 'body', g: BOXG, m: white, p: [0, 1.36, 0.132], s: [0.06, 0.16, 0.01] },
+      ...[-1, 1].map((sx) => ({ grp: 'body', g: SPH, m: crimson, p: [0.025 * sx, 1.43, 0.14], s: [0.025, 0.018, 0.01] })),
+      ...[1.18, 1.06].map((y) => ({ grp: 'body', g: SPH, m: gold, p: [0.02, y, 0.136], s: [0.012, 0.012, 0.006] })),
+      { grp: 'body', g: BOXG, m: gold, p: [0.11, 1.3, 0.136], s: [0.05, 0.06, 0.006] },
+    ]),
+    // Mimic (Labubu thief): a Yale disguise. Navy sweater with a white Y and a Yale beanie, but the face
+    // is still zombie green and the eyes still glow
+    ...only('mimic', [
+      { grp: 'body', g: BOXG, m: white, p: [0, 1.2, 0.133], s: [0.022, 0.09, 0.01] },
+      { grp: 'body', g: BOXG, m: white, p: [-0.028, 1.285, 0.133], r: [0, 0, 0.55], s: [0.022, 0.1, 0.01] },
+      { grp: 'body', g: BOXG, m: white, p: [0.028, 1.285, 0.133], r: [0, 0, -0.55], s: [0.022, 0.1, 0.01] },
+      { grp: 'head', g: SPH, m: navy, p: [0, 0.19, -0.01], s: [0.118, 0.085, 0.122] },
+      { grp: 'head', g: SPH, m: white, p: [0, 0.28, -0.01], s: [0.035, 0.035, 0.035] },
+    ]),
+  ]
 }
 
 // ---------- Yale students' Halloween costumes (all Yale-themed)
@@ -285,7 +352,7 @@ function costumeParts(L) {
   ]
 }
 
-const ZOMBIE = rigParts({ skin: '#8fa37a', shirt: '#a51c30', pants: '#5c5348', hair: '#2b2620', eye: '#e6f04a', eyeGlow: true, shoe: '#2a2622', letter: 'H' })
+const ZOMBIE = rigParts({ skin: '#8fa37a', shirt: '#ffffff', pants: '#ffffff', hair: '#2b2620', eye: '#e6f04a', eyeGlow: true, shoe: '#2a2622', letter: 'H' })
 const STUDENT = rigParts({ skin: '#ffffff', shirt: '#ffffff', pants: '#ffffff', hair: '#ffffff', eye: '#16100c', shoe: '#e9e6e0', letter: 'Y' }) // white bases: tinted per costume
 const SKIN_TONES = ['#f1c9a9', '#d9a97e', '#b98260', '#8d5b3e', '#5e3a26', '#e8b896'].map((c) => new THREE.Color(c))
 const HAIR_TONES = ['#1a1412', '#3b2a1e', '#6e4a2c', '#b08a52', '#2a2a2a', '#c45a2a'].map((c) => new THREE.Color(c))
@@ -391,6 +458,8 @@ const S = {
   blasterOwned: false, // the easter egg (weapons.js: BLASTER)
   blasterCharge: 0, // fractional charges (inv.blaster is the whole shots, for the HUD)
   blasts: [], // Ticker Tape Blaster arrows in flight
+  puddings: [], // Hasty Pudding Chef throws in flight
+  seenKinds: new Set(), // Harvard types already introduced with a banner
   heroes: Object.fromEntries(Object.keys(HEROES).map((id) => [id, { id, on: false, phase: Math.random() * 6 }])), // the Deans (weapons.js: HEROES)
   swanTick: 0,
   kills: 0,
@@ -425,6 +494,15 @@ export const PUZZLE = { active: false, level: 0, x: 0, z: 0, solved: 0 }
 
 // dev only: inspect the fight from the console
 if (import.meta.env.DEV) window.__rivals = S
+// dev only: spawn a given Harvard type at a spot (for screenshots and tests)
+if (import.meta.env.DEV)
+  window.__spawnKind = (kind, x, z) => {
+    const q = S.zombies.find((o) => !o.on)
+    if (!q || !spawnZombie(S.player || { x, z }, kind === 'mimic', { at: { x, z } })) return null
+    Object.assign(q, { kind, costume: kind, scale: KINDS[kind].scale || 1 })
+    tintZombie(S.zombies.indexOf(q), kind)
+    return q
+  }
 
 let bannerTimer
 const banner = (text, ms = 2800) => {
@@ -472,7 +550,7 @@ export function resetRivals() {
   for (const s of S.students) s.on = false
   DAN.golden = false
   Object.assign(S, {
-    wave: 0, toSpawn: 0, spawnT: 0, interlude: 1.5, hp: 100, shield: 0, spells: 0, weapon: null, slow: 0, labubuT: 0, thievesLeft: 0, bossDue: 0, bolts: [], train: { gym: 0, boxing: 0, track: 0 }, swanT: 0, swanTick: 0, blasterOwned: false, blasterCharge: 0, blasts: [], kills: 0, started: false, fx: [],
+    wave: 0, toSpawn: 0, spawnT: 0, interlude: 1.5, hp: 100, shield: 0, spells: 0, weapon: null, slow: 0, labubuT: 0, thievesLeft: 0, bossDue: 0, bolts: [], train: { gym: 0, boxing: 0, track: 0 }, swanT: 0, swanTick: 0, blasterOwned: false, blasterCharge: 0, blasts: [], puddings: [], seenKinds: new Set(), kills: 0, started: false, fx: [],
     endowment: START_ENDOWMENT, inv: { briefcase: false, cards: 0, thermos: 1, takeover: 0, crash: 0, gavel: false, cannon: 0, swan: 0, endowment: 0, blaster: 0 }, melee: 'wsj', ranged: 'thermos', cool: { melee: 0, card: 0, sic: 0 }, cards: [], thermoses: [], crash: 0, cleared: false, coffeeT: 0,
   })
   for (const h of Object.values(S.heroes)) h.on = false
@@ -516,7 +594,7 @@ export function castSpell() {
     z.hp -= SPELL_DAMAGE
     z.flash = 0.3
     z.stun = Math.max(z.stun || 0, 1)
-    const push = (SPELL_RADIUS - d) * 0.35 * (z.boss ? 0.15 : 1)
+    const push = (SPELL_RADIUS - d) * 0.35 * (z.boss ? 0.15 : z.kind === 'bruiser' ? 0.35 : 1)
     shove(z, (dx / (d || 1)) * push, (dz / (d || 1)) * push)
   }
   S.fx.push({ x: p.x, z: p.z, r: SPELL_RADIUS, life: 0.6, max: 0.6, color: '#ff4fa3' })
@@ -551,7 +629,7 @@ export function meleeAttack() {
     z.hp -= w.damage * (S.weapon?.mult || 1)
     z.flash = 0.25
     z.stun = Math.max(z.stun || 0, w.stun)
-    const knock = w.knock * (z.boss ? 0.15 : 1) // bosses barely budge
+    const knock = w.knock * (z.boss ? 0.15 : z.kind === 'bruiser' ? 0.35 : 1) // bosses (and bruisers) barely budge
     shove(z, ((z.x - p.x) / (d || 1)) * knock, ((z.z - p.z) / (d || 1)) * knock)
   }
   if (hits.length) sfx.hit(S.melee !== 'wsj')
@@ -587,7 +665,7 @@ export function unlockBlaster() {
   S.inv.blaster = S.blasterCharge = BLASTER.charges
   S.ranged = 'blaster'
   sfx.coin()
-  banner('📈 EASTER EGG! Boola boola: you found the Ticker Tape Blaster. Bull market! It recharges on its own (L / right click).', 5000)
+  banner('📈 EASTER EGG! Boola boola: you found the Ticker Tape Blaster. Bull market! 20 shots, and they recharge slowly, so pick your moments (L / right click).', 5500)
   pushHud()
 }
 export function fireBlaster() {
@@ -987,12 +1065,32 @@ function spawnStudent(s, p, near = true, desk = null) {
   Object.assign(s, { on: true, x: at.x, z: at.z, y: 0, yaw: 0, hp: classmateHp(), down: false, downT: 0, moving: false, attacking: false, cool: 0, flash: 0, pace: 0.8 + Math.random() * 0.5, target: null, yieldT: 0, side: Math.random() * 2 - 1, ...navInit() })
 }
 
+// each Harvard type's colors (the zombie rig's shirt and pants are white, tinted per instance)
+let zMeshesShared = null
+const _tint = new THREE.Color()
+function tintZombie(i, kind) {
+  if (!zMeshesShared) return
+  const k = KINDS[kind]
+  ZOMBIE.forEach((pt, j) => {
+    if (!pt.shirt && !pt.pants) return
+    zMeshesShared[j].setColorAt(i, _tint.set(pt.shirt ? k.shirt : k.pants))
+    zMeshesShared[j].instanceColor.needsUpdate = true
+  })
+}
+
 function spawnZombie(p, thief, { boss = 0, at = null } = {}) {
   const z = S.zombies.find((q) => !q.on)
   if (!z) return false
   at = at || ringPoint(p, 16, 34)
-  const hp = boss ? Math.round(70 * boss ** 1.35 + S.wave * 4) : 4 + S.wave * 0.6
-  Object.assign(z, { on: true, x: at.x, z: at.z, y: 0, yaw: 0, hp, maxHp: hp, down: false, downT: 0, moving: true, attacking: false, flash: 0, stun: 0, burn: 0, retarget: 0, target: null, thief: null, boss: null, scale: 1, stalker: Math.random() < STALKER_SHARE, age: 0, ...navInit() })
+  const kind = thief ? 'mimic' : boss ? 'freshman' : pickKind(S.wave)
+  const K = KINDS[kind]
+  const hp = boss ? Math.round(70 * boss ** 1.35 + S.wave * 4) : (4 + S.wave * 0.6) * K.hp
+  Object.assign(z, { on: true, x: at.x, z: at.z, y: 0, yaw: 0, hp, maxHp: hp, down: false, downT: 0, moving: true, attacking: false, flash: 0, stun: 0, burn: 0, retarget: 0, target: null, thief: null, boss: null, kind, costume: kind, scale: K.scale || 1, throwT: 1 + Math.random() * 2, stalker: Math.random() < STALKER_SHARE, age: 0, ...navInit() })
+  tintZombie(S.zombies.indexOf(z), kind)
+  if (KIND_INTRO[kind] && !S.seenKinds.has(kind)) {
+    S.seenKinds.add(kind)
+    banner(KIND_INTRO[kind], 4200)
+  }
   if (boss) {
     z.boss = { tier: boss, name: bossName(boss), slam: 4, summon: 6, bolt: 3, charge: 5, dash: 0 }
     z.scale = Math.min(2.3, 1.55 + boss * 0.12)
@@ -1249,6 +1347,34 @@ function rescueLost(z) {
   Object.assign(z, { ri, los: false, losT: 0, stuckN: 0 })
 }
 
+// Hasty Pudding Chef: keeps 5-11 m from its target and lobs puddings. Returns false when it's close enough
+// to just claw (then it fights like any zombie).
+const PUDDING = { every: 2.8, speed: 9, dmg: 8, splash: 1.3 }
+function chefStep(z, tg, zSpeed, dt) {
+  const d = dist(z, tg)
+  if (d < 1.6) return false
+  z.attacking = false
+  if (d > 11 || !clearPath(z.x, z.z, tg.x, tg.z)) navTo(z, tg.x, tg.z, zSpeed * 0.9, dt, 9)
+  else if (d < 5) {
+    // back off to throwing distance
+    const ux = (z.x - tg.x) / d
+    const uz = (z.z - tg.z) / d
+    navTo(z, z.x + ux * 3, z.z + uz * 3, zSpeed * 0.8, dt, 0.2)
+  } else {
+    z.moving = false
+    z.yaw += wrap(Math.atan2(tg.x - z.x, tg.z - z.z) - z.yaw) * Math.min(1, dt * 6)
+  }
+  unstick(z, dt)
+  if ((z.throwT -= dt) <= 0 && d >= 3 && d <= 13 && clearPath(z.x, z.z, tg.x, tg.z)) {
+    z.throwT = PUDDING.every + Math.random()
+    // a lob that lands where the target is standing
+    const T = d / PUDDING.speed
+    S.puddings.push({ x: z.x, y: 1.5 * (z.scale || 1), z: z.z, vx: ((tg.x - z.x) / d) * PUDDING.speed, vz: ((tg.z - z.z) / d) * PUDDING.speed, vy: (12 * T) / 2 - 1.5 / T })
+    sfx.whoosh()
+  }
+  return true
+}
+
 // damage to you (the shield soaks it first)
 function hurtPlayer(dmg) {
   const soak = Math.min(S.shield, dmg)
@@ -1379,6 +1505,8 @@ const BOLT_MAT = new THREE.MeshStandardMaterial({ color: '#7a0010', emissive: '#
 const BLAST_GEO = new THREE.ConeGeometry(0.11, 0.24, 3).rotateX(Math.PI / 2)
 const BLAST_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.4, 3.2, 1.0), toneMapped: false })
 // ...trailing a strip of ticker tape
+const PUDDING_GEO = new THREE.SphereGeometry(0.13, 12, 8)
+const PUDDING_MAT = new THREE.MeshStandardMaterial({ color: '#c8873e', roughness: 0.35, emissive: '#3a1c05', emissiveIntensity: 0.5 }) // a glossy caramel pudding
 const TAPE_GEO = new THREE.BoxGeometry(0.06, 0.006, 0.5).translate(0, 0, -0.35)
 const TAPE_MAT = new THREE.MeshStandardMaterial({ color: '#f3efe2', roughness: 0.9, emissive: '#3a3a30', emissiveIntensity: 0.4 })
 
@@ -1723,6 +1851,7 @@ export default function Rivals() {
   const boltMesh = useRef()
   const blastMesh = useRef()
   const tapeMesh = useRef()
+  const puddingMesh = useRef()
   const posterHit = useRef()
   const crown = useRef()
   const puzzle = useRef()
@@ -1737,6 +1866,8 @@ export default function Rivals() {
     }
     // students: a mix of skin and hair colors (instance color multiplies a white material)
     const tint = new THREE.Color()
+    zMeshesShared = zMeshes.current
+    for (let i = 0; i < MAX_ZOMBIES; i++) tintZombie(i, S.zombies[i].kind || 'freshman')
     STUDENT.forEach((pt, j) => {
       for (let i = 0; i < MAX_STUDENTS; i++) {
         const c = COSTUMES[S.students[i].costume]
@@ -1933,16 +2064,21 @@ export default function Rivals() {
         }
         if (!z.target) {
           // nothing in sight: shamble along the cloister
-          followRing(z, zSpeed * 0.7, dt)
+          followRing(z, zSpeed * 0.7 * KINDS[z.kind || 'freshman'].speed, dt)
           unstick(z, dt)
           z.attacking = false
           z.y = floorAt(z.x, z.z)
           continue
         }
         const tg = z.target
+        const K = KINDS[z.kind || 'freshman']
         const reach = REACH * (z.scale || 1)
-        const brute = z.boss ? 1.6 + z.boss.tier * 0.25 : 1 // bosses hit harder
-        const d = navTo(z, tg.x, tg.z, zSpeed * (z.boss ? 0.85 : 1), dt, reach * 0.9)
+        const brute = z.boss ? 1.6 + z.boss.tier * 0.25 : K.dmg // bosses (and bruisers) hit harder
+        if (z.kind === 'chef' && chefStep(z, tg, zSpeed, dt)) {
+          z.y = floorAt(z.x, z.z)
+          continue
+        }
+        const d = navTo(z, tg.x, tg.z, zSpeed * (z.boss ? 0.85 : K.speed), dt, reach * 0.9)
         unstick(z, dt)
         z.attacking = d <= reach
         if (z.attacking) {
@@ -2005,6 +2141,7 @@ export default function Rivals() {
           let bd = SIGHT_S
           for (const z of live) {
             if ((claims.get(z) || 0) >= (z.thief ? PER_THIEF : PER_ZOMBIE)) continue // enough on that one already
+            if (z.kind === 'mimic' && LAB.carrier !== z && dist(s, z) > 3) continue // fooled by the disguise
             const d = dist(s, z) * (z.thief ? 0.5 : 1) // a Labubu thief is a priority target
             if (d < bd) {
               bd = d
@@ -2093,6 +2230,7 @@ export default function Rivals() {
         if (!h.target) {
           let bd = 14
           for (const z of live) {
+            if (z.kind === 'mimic' && LAB.carrier !== z && dist(z, h) > 3) continue // fooled too
             const d = Math.min(dist(z, h), dist(z, p) + 2)
             if (d < bd) {
               bd = d
@@ -2312,6 +2450,23 @@ export default function Rivals() {
         }
       }
 
+      // Hasty Pudding: lobbed in an arc, splats on landing (or on a wall)
+      S.puddings = S.puddings.filter((g) => {
+        g.vy -= 12 * dt
+        g.x += g.vx * dt
+        g.y += g.vy * dt
+        g.z += g.vz * dt
+        if (g.y > floorAt(g.x, g.z) + 0.1 && !wallAt(g.x, g.z, g.y, 0.06)) return true
+        if (Math.hypot(p.x - g.x, p.z - g.z) < PUDDING.splash) hurtPlayer(PUDDING.dmg)
+        for (const q of [...S.students, ...Object.values(S.heroes)]) {
+          if (!q.on || q.down || Math.hypot(q.x - g.x, q.z - g.z) > PUDDING.splash) continue
+          q.hp -= 1.5
+          q.flash = 0.3
+        }
+        S.fx.push({ x: g.x, z: g.z, r: PUDDING.splash, life: 0.5, max: 0.5, color: '#f3e2b8' })
+        return false
+      })
+
       // boss bolts: fly straight, stop at walls, hurt whoever they hit
       S.bolts = S.bolts.filter((b) => {
         b.x += b.vx * dt
@@ -2365,7 +2520,7 @@ export default function Rivals() {
     // ---------- draw
     const zm = zMeshes.current
     const sm = sMeshes.current
-    S.zombies.forEach((z, i) => poseAgent(zm, ZOMBIE, i, z, t, 'z'))
+    S.zombies.forEach((z, i) => poseAgent(zm, ZOMBIE, i, z, t, z.kind === 'mimic' && !z.down ? 's' : 'z')) // mimics walk upright, like a student
     S.students.forEach((s, i) => poseAgent(sm, STUDENT, i, s, t, 's'))
     for (const mesh of [...zm, ...sm]) mesh.instanceMatrix.needsUpdate = true
 
@@ -2404,7 +2559,7 @@ export default function Rivals() {
       boltMesh.current.setMatrixAt(k, _m)
     }
     boltMesh.current.instanceMatrix.needsUpdate = true
-    const thieves = S.zombies.filter((z) => z.on && !z.down && z.thief && z !== carrier)
+    const thieves = S.zombies.filter((z) => z.on && !z.down && z.thief && z !== carrier && dist(z, camera.position) < 12) // the disguise holds at a distance
     thiefMarks.current.forEach((m, k) => {
       const z = thieves[k]
       m.visible = !!z
@@ -2441,6 +2596,15 @@ export default function Rivals() {
       cardMesh.current.setMatrixAt(k, _o.matrix)
     })
     cardMesh.current.instanceMatrix.needsUpdate = true
+    puddingMesh.current.count = S.puddings.length
+    S.puddings.forEach((g, k) => {
+      _o.position.set(g.x, g.y, g.z)
+      _o.rotation.set(t * 8, t * 5, 0)
+      _o.scale.set(1, 0.75, 1)
+      _o.updateMatrix()
+      puddingMesh.current.setMatrixAt(k, _o.matrix)
+    })
+    puddingMesh.current.instanceMatrix.needsUpdate = true
     blastMesh.current.count = tapeMesh.current.count = S.blasts.length
     S.blasts.forEach((b, k) => {
       _o.position.set(b.x, b.y, b.z)
@@ -2544,6 +2708,7 @@ export default function Rivals() {
       <instancedMesh ref={boltMesh} args={[BOLT_GEO, BOLT_MAT, MAX_BOLTS]} frustumCulled={false} />
       <instancedMesh ref={blastMesh} args={[BLAST_GEO, BLAST_MAT, 30]} frustumCulled={false} />
       <instancedMesh ref={tapeMesh} args={[TAPE_GEO, TAPE_MAT, 30]} frustumCulled={false} />
+      <instancedMesh ref={puddingMesh} args={[PUDDING_GEO, PUDDING_MAT, 40]} frustumCulled={false} />
       {/* an invisible stand-in for the MGT 409 poster, so you can aim at it (the easter egg) */}
       <mesh ref={posterHit} position={[POSTER.x - 0.02, POSTER.y, POSTER.z]} rotation={[0, -Math.PI / 2, 0]}>
         <planeGeometry args={[POSTER.w, POSTER.h]} />
