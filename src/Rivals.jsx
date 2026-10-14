@@ -47,6 +47,7 @@ const SPELL_DAMAGE = 6
 const DOWN_TIME = 3 // seconds a dead zombie lies there before it sinks away
 const KO_TIME = 4 // seconds a fallen classmate lies there (Dean Tsung can still save them) before they turn
 const NOTE_RANGE = 3.5
+export const FINAL_WAVE = 50 // clear it to win: 50 waves for 50 years of Yale SOM (1976-2026)
 const INTERMISSION = 25 // seconds between waves to visit the Endowment Office
 const START_ENDOWMENT = 300
 const LABUBU_TIME = 90 // seconds to get the Labubu back before Harvard wins
@@ -1932,7 +1933,13 @@ export default function Rivals() {
         if (S.wave > 0 && !S.cleared) {
           S.cleared = true
           S.interlude = INTERMISSION
-          banner(`✅ Wave ${S.wave} cleared! The Endowment Office is open: press B (or visit the vending machine by Ross Library).`, 5000)
+          if (S.wave >= FINAL_WAVE) {
+            // the finale: Evans Hall held for all 50 waves
+            sfx.coin()
+            chat.set({ over: { won: true, wave: S.wave, kills: S.kills, classmates: classmateCount() }, zombie: null })
+            return
+          }
+          banner(`✅ Wave ${S.wave} cleared! The Endowment Office is open: press B (or the vending machine by Ross Library).`, 5000)
         }
         S.interlude -= dt
         if (S.interlude <= 0) {

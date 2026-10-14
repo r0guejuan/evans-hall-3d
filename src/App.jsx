@@ -10,7 +10,7 @@ import TouchControls from './TouchControls.jsx'
 import ChatWindow from './ChatWindow.jsx'
 import WeaponWheel from './WeaponWheel.jsx'
 import { CHAT_PROFESSORS, chat, useChat } from './chat.js'
-import { COFFEE, DAN_LEVELS, RANGED, buy, canShop, drinkCoffee, freeSeats, hire, hireHero, meleeAttack, nextTraining, PUZZLE, solvePuzzle, train, unlockBlaster, resetRivals, say, sicEm, startNextWave, useRanged } from './Rivals.jsx'
+import { COFFEE, DAN_LEVELS, FINAL_WAVE, RANGED, buy, canShop, drinkCoffee, freeSeats, hire, hireHero, meleeAttack, nextTraining, PUZZLE, solvePuzzle, train, unlockBlaster, resetRivals, say, sicEm, startNextWave, useRanged } from './Rivals.jsx'
 import { ADMIT, HEROES, ITEMS, MELEE, POSTER_Y, SHURIKEN, TRAINING } from './weapons.js'
 import { POSTER_TILES } from './textures.js'
 import * as sfx from './sfx.js'
@@ -88,6 +88,17 @@ export default function App() {
   const hp = useChat((s) => s.hp) ?? 100
   const over = useChat((s) => s.over)
   const banner = useChat((s) => s.banner)
+  // game messages: a small feed in the corner (not a big banner in the middle of the screen). Each message
+  // slides in, a few stack up, and each fades after a few seconds.
+  const [toasts, setToasts] = useState([])
+  useEffect(() => {
+    if (!banner) return
+    const id = Math.random()
+    setToasts((ts) => [...ts.slice(-2), { id, text: banner }])
+    const ms = Math.min(7000, 3200 + banner.length * 30)
+    const timer = setTimeout(() => setToasts((ts) => ts.filter((t) => t.id !== id)), ms)
+    return () => clearTimeout(timer)
+  }, [banner])
   const shield = useChat((s) => s.shield) || 0
   const spells = useChat((s) => s.spells) || 0
   const powerWeapon = useChat((s) => s.powerWeapon)
@@ -305,7 +316,10 @@ export default function App() {
 
       <div className="rivalshud" aria-label="Fight status">
         <div className="row">
-          <span>🧟 Wave <b>{wave || 1}</b></span>
+          <span>
+            🧟 Wave <b>{wave || 1}</b>
+            <small> / {FINAL_WAVE}</small>
+          </span>
           <span>💀 <b>{kills || 0}</b> down</span>
           <span title="Classmates fighting for you (recruit more at Admissions, by the coffee table)">🎓 <b>{classmates}</b> classmates</span>
           <span className="hpbar" role="meter" aria-label="Health" aria-valuenow={hp} aria-valuemin={0} aria-valuemax={100}>
@@ -385,9 +399,13 @@ export default function App() {
         </div>
       )}
       {hp < 100 && <div className="hurt" style={{ opacity: (1 - hp / 100) * 0.6 }} />}
-      {banner && (
-        <div className="rivalsbanner" role="status">
-          {banner}
+      {playing && toasts.length > 0 && (
+        <div className="toasts" role="status" aria-live="polite">
+          {toasts.map((t) => (
+            <div key={t.id} className="toast">
+              {t.text}
+            </div>
+          ))}
         </div>
       )}
 
@@ -411,7 +429,9 @@ export default function App() {
               ⏸
             </button>
             <div className="mstats">
-              <span>🧟 <b>{wave || 1}</b></span>
+              <span>
+                🧟 <b>{wave || 1}</b>/{FINAL_WAVE}
+              </span>
               <span>💀 <b>{kills || 0}</b></span>
               <span>🎓 <b>{classmates}</b></span>
               <span className="hpbar" role="meter" aria-label="Health" aria-valuenow={hp} aria-valuemin={0} aria-valuemax={100}>
@@ -686,7 +706,37 @@ export default function App() {
         </div>
       )}
 
-      {over && (
+      {over?.won && (
+        <div className="overlay boom won">
+          <div className="card" role="alertdialog" aria-label="You won">
+            <div className="kicker">Yale SOM · 50 years · 1976–2026</div>
+            <h1 className="title">🎓 Evans Hall stands!</h1>
+            <p className="sub">
+              You held off Harvard for all {FINAL_WAVE} waves, one for every year of the Yale School of Management. Prof. Zaman still has his Labubu, Handsome
+              Dan is very proud, and the Endowment has never looked better. Happy 50th, Yale SOM! Boola boola!
+            </p>
+            <div className="final">
+              <div>
+                <b>{over.wave}</b>
+                <span>waves</span>
+              </div>
+              <div>
+                <b>{over.kills}</b>
+                <span>zombies down</span>
+              </div>
+              <div>
+                <b>{over.classmates}</b>
+                <span>classmates standing</span>
+              </div>
+            </div>
+            <button className="go" onClick={fightAgain} autoFocus>
+              Play again
+            </button>
+          </div>
+        </div>
+      )}
+
+      {over && !over.won && (
         <div className="overlay boom">
           <div className="card" role="alertdialog" aria-label="Game over">
             <div className="kicker">Game over</div>
@@ -728,7 +778,7 @@ export default function App() {
             <p className="rules">
               🧟 Harvard zombies are loose in Evans Hall, in growing waves. Fight with business school gear: kills earn <b>Endowment</b> to spend at the
               Endowment Office between waves, and Handsome Dan fights at your side. ⚡ Answer the professors' questions for <b>power-ups</b> (study notes with the
-              answers are hidden around the building). ☕ Hurt? Grab coffee at the <b>snack table</b> in the south cloister (☕ on the map); 🎓 <b>Admissions</b> is right next to it. Fallen classmates rise as Harvard zombies, so recruit more there. 👑 Every 4th wave brings a <b>boss</b>, and every 3rd hides a 🧩 <b>puzzle</b> that unlocks a super weapon. 😱 Don't let them steal the{' '}
+              answers are hidden around the building). ☕ Hurt? Grab coffee at the <b>snack table</b> in the south cloister (☕ on the map); 🎓 <b>Admissions</b> is right next to it. Fallen classmates rise as Harvard zombies, so recruit more there. 🏁 Survive <b>{FINAL_WAVE} waves</b>, one for each year of Yale SOM, to win. 👑 Every 4th wave brings a <b>boss</b>, and every 3rd hides a 🧩 <b>puzzle</b> that unlocks a super weapon. 😱 Don't let them steal the{' '}
               <b>Labubu</b> off Prof. Zaman in room 2200! Every wave sends thieves after it. If one grabs it, drop the thief, pick up the Labubu, and bring it back to him within 90 seconds or the game is over.
             </p>
             <button className="go">{isTouch ? 'Tap to walk in' : 'Click to walk in'}</button>

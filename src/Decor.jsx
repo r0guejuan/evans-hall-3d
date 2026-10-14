@@ -337,7 +337,15 @@ export default function Decor() {
       const z = (rand() - 0.5) * 24
       if (inPoly(x, z, COURTYARD) && Math.hypot(x, z) > 3 && stones.every((s) => Math.hypot(s.x - x, s.z - z) > 3.5)) stones.push({ x, z, yaw: (rand() - 0.5) * 0.5, tilt: (rand() - 0.5) * 0.12, text: EPITAPHS[stones.length] })
     }
-    return { pumpkins, bulbs, webs, ghosts, bats, stones }
+    // fire pits among the graves, so you can see the graveyard from the cloister
+    const fires = []
+    for (let k = 0; k < 120 && fires.length < 5; k++) {
+      const x = (rand() - 0.5) * 22
+      const z = (rand() - 0.5) * 18
+      const nearStone = stones.some((st) => Math.hypot(st.x - x, st.z - z) < 4)
+      if (inPoly(x, z, COURTYARD) && nearStone && stones.every((st) => Math.hypot(st.x - x, st.z - z) > 1.6) && fires.every((f) => Math.hypot(f.x - x, f.z - z) > 4.5)) fires.push({ x, z, phase: rand() * 10 })
+    }
+    return { pumpkins, bulbs, webs, ghosts, bats, stones, fires }
   }, [])
 
   // ---------- pumpkins + bulbs: static instances
@@ -491,6 +499,9 @@ export default function Decor() {
         </group>
       ))}
       {/* the courtyard graveyard */}
+      {layout.fires.map((f, k) => (
+        <FirePit key={k} {...f} />
+      ))}
       {layout.stones.map((st, k) => (
         <group key={k} position={[st.x, 0, st.z]} rotation={[st.tilt, st.yaw, 0]}>
           <mesh position={[0, 0.48, 0]} castShadow>
@@ -518,6 +529,63 @@ export default function Decor() {
           ))}
         </group>
       ))}
+    </group>
+  )
+}
+
+// a small fire pit: a ring of stones, crossed logs, layered flickering flames, rising embers, and a warm
+// flickering light that reaches the gravestones
+const FLAME = new THREE.ConeGeometry(1, 1, 10, 1, true)
+const flameMat = (c) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, fog: false }) // glows through the night fog
+const FLAME_MATS = [flameMat(new THREE.Color(3.2, 0.9, 0.15)), flameMat(new THREE.Color(3.6, 2.0, 0.4)), flameMat(new THREE.Color(3.4, 3.0, 1.6))]
+const EMBER_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.5, 1.4, 0.2), toneMapped: false, fog: false })
+const ROCK_MAT = new THREE.MeshStandardMaterial({ color: '#4a4744', roughness: 0.95 })
+const LOG_MAT = new THREE.MeshStandardMaterial({ color: '#3a2618', roughness: 0.9, emissive: '#5a1a00', emissiveIntensity: 0.4 })
+function FirePit({ x, z, phase }) {
+  const flames = useRef([])
+  const embers = useRef([])
+  const light = useRef()
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime + phase
+    const flick = 0.8 + Math.sin(t * 13) * 0.08 + Math.sin(t * 23.7) * 0.06 + Math.sin(t * 5.3) * 0.06
+    light.current.intensity = 16 * flick
+    flames.current.forEach((f, k) => {
+      if (!f) return
+      const s = 1 - k * 0.25
+      f.scale.set(0.22 * s * (1 + Math.sin(t * 9 + k) * 0.08), (0.55 + k * 0.05) * s * flick * (1 + Math.sin(t * 7.3 + k * 2) * 0.12), 0.22 * s)
+      f.rotation.y = t * (1.5 + k)
+    })
+    embers.current.forEach((e, k) => {
+      if (!e) return
+      const life = (t * 0.6 + k / embers.current.length) % 1
+      e.position.set(Math.sin(k * 2.4 + t) * 0.15 * life, 0.3 + life * 1.6, Math.cos(k * 1.7 + t) * 0.15 * life)
+      e.scale.setScalar(1 - life)
+    })
+  })
+  return (
+    <group position={[x, 0, z]} scale={1.6}>
+      {Array.from({ length: 9 }, (_, k) => {
+        const a = (k / 9) * Math.PI * 2
+        return (
+          <mesh key={k} material={ROCK_MAT} position={[Math.cos(a) * 0.42, 0.07, Math.sin(a) * 0.42]} scale={[0.12, 0.09, 0.1]} castShadow>
+            <sphereGeometry args={[1, 8, 6]} />
+          </mesh>
+        )
+      })}
+      {[0, 1.1, 2.2].map((a) => (
+        <mesh key={a} material={LOG_MAT} position={[0, 0.09, 0]} rotation={[0, a, Math.PI / 2 - 0.25]}>
+          <cylinderGeometry args={[0.045, 0.05, 0.6, 8]} />
+        </mesh>
+      ))}
+      {FLAME_MATS.map((m, k) => (
+        <mesh key={k} ref={(el) => (flames.current[k] = el)} geometry={FLAME} material={m} position={[0, 0.32 + k * 0.03, 0]} />
+      ))}
+      {Array.from({ length: 6 }, (_, k) => (
+        <mesh key={k} ref={(el) => (embers.current[k] = el)} material={EMBER_MAT}>
+          <sphereGeometry args={[0.015, 6, 4]} />
+        </mesh>
+      ))}
+      <pointLight ref={light} position={[0, 0.9, 0]} color="#ff8a3a" intensity={16} distance={14} decay={1.4} />
     </group>
   )
 }

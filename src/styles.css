@@ -1530,3 +1530,77 @@ body,
   color: #bdbdc4;
   font: italic 13px Georgia, serif;
 }
+
+/* ---------- game messages: a small feed in the top-left corner, out of the way of the action */
+.toasts {
+  position: fixed;
+  top: 62px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(360px, calc(100vw - 260px));
+  min-width: 220px;
+  pointer-events: none;
+  z-index: 7;
+}
+
+.toast {
+  padding: 7px 11px;
+  border-left: 3px solid #c8102e;
+  border-radius: 8px;
+  background: rgba(10, 10, 14, 0.72);
+  color: #f3e9ea;
+  font-size: 13px;
+  line-height: 1.35;
+  animation: toastin 0.25s ease-out, toastout 0.6s ease-in 3.4s forwards;
+}
+
+.toast:last-child {
+  animation: toastin 0.25s ease-out; /* the newest one stays until it's replaced or times out */
+}
+
+@keyframes toastin {
+  from {
+    opacity: 0;
+    transform: translateX(-12px);
+  }
+}
+
+@keyframes toastout {
+  to {
+    opacity: 0.35;
+  }
+}
+
+/* phones: under the status strip, narrower, and only the two newest */
+.touchmode .toasts {
+  top: calc(env(safe-area-inset-top) + 56px);
+  left: calc(env(safe-area-inset-left) + 8px);
+  width: min(58vw, 300px);
+  min-width: 0;
+}
+
+.touchmode .toast {
+  font-size: 12px;
+  padding: 6px 9px;
+}
+
+.touchmode .toast:nth-last-child(n + 3) {
+  display: none;
+}
+
+/* with a boss on screen, its health bar sits there on phones: drop the feed below it */
+.touchmode .bossbar ~ .toasts {
+  top: calc(env(safe-area-inset-top) + 90px);
+}
+
+/* the wave-50 finale */
+.overlay.won .card {
+  border-color: #ffd76a;
+  box-shadow: 0 0 60px rgba(255, 215, 106, 0.45);
+}
+
+.overlay.won .kicker {
+  color: #ffd76a;
+}
