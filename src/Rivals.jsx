@@ -22,7 +22,7 @@ import * as sfx from './sfx.js'
 // Zombies and students are instanced rigs (one InstancedMesh per body part), posed by hand each frame.
 
 const MAX_ZOMBIES = 40
-const STUDENTS = 10 // classmates you start with; the fallen are gone for good, so recruit more at Admissions
+const STUDENTS = 10 // classmates you start with; the fallen rise as zombies, so recruit more at Admissions
 const MAX_STUDENTS = 33 // the most classmates fighting at once
 const Z_SPEED = 1.1 // m/s, plus a little per wave
 const S_SPEED = 2.6
@@ -45,7 +45,7 @@ const BONK_RANGE = 3.2
 const SPELL_RADIUS = 9
 const SPELL_DAMAGE = 6
 const DOWN_TIME = 3 // seconds a dead zombie lies there before it sinks away
-const KO_TIME = 4 // seconds a fallen classmate lies there before they're gone
+const KO_TIME = 4 // seconds a fallen classmate lies there (Dean Tsung can still save them) before they turn
 const NOTE_RANGE = 3.5
 const INTERMISSION = 25 // seconds between waves to visit the Endowment Office
 const START_ENDOWMENT = 300
@@ -112,7 +112,7 @@ function rigParts(look) {
   ]
   if (look.letter === 'H') {
     // Harvard: white H on a crimson sweater, plus a grim little mouth
-    const noH = ['chef', 'mimic', 'bruiser']
+    const noH = ['chef', 'mimic', 'bruiser', 'turned']
     parts.push(
       { grp: 'body', g: BOXG, m: L.white, p: [-0.045, 1.26, 0.133], s: [0.022, 0.15, 0.01], hideFor: noH },
       { grp: 'body', g: BOXG, m: L.white, p: [0.045, 1.26, 0.133], s: [0.022, 0.15, 0.01], hideFor: noH },
@@ -140,12 +140,14 @@ export const KINDS = {
   chef: { name: 'Hasty Pudding Chef', shirt: '#efece6', pants: '#3a3a3a', hp: 0.9, speed: 0.9, dmg: 0.8, from: 3, share: 0.16 },
   bruiser: { name: 'Final Club Bruiser', shirt: '#5e0f1b', pants: '#2a2a2e', hp: 3, speed: 0.75, dmg: 2, scale: 1.28, from: 5, share: 0.1 },
   mimic: { name: 'Mimic', shirt: '#00356b', pants: '#3b5a85', hp: 1, speed: 1, dmg: 1 }, // the Labubu thieves, disguised
+  turned: { name: 'Turned Classmate', shirt: '#1d3b66', pants: '#3b4a60', hp: 1, speed: 1, dmg: 1 }, // a fallen Yale classmate, risen for Harvard
 }
 const KIND_INTRO = {
   sprinter: '🏃 Crimson Sprinters! Harvard track: fast, but they go down easy.',
   chef: '🍮 Hasty Pudding Chefs lob puddings from range. Close the distance!',
   bruiser: '💪 Final Club Bruisers: huge, slow, hit hard, and barely budge.',
   mimic: '🎭 Labubu thieves disguise themselves as Yale students. Watch for the glowing green faces!',
+  turned: '🧟 A fallen classmate rose as a Harvard zombie! Keep your classmates alive (Dean Tsung can save the fallen).',
 }
 function pickKind(wave) {
   let r = Math.random()
@@ -185,6 +187,13 @@ function harvardParts(L) {
       ...[-1, 1].map((sx) => ({ grp: 'body', g: SPH, m: crimson, p: [0.025 * sx, 1.43, 0.14], s: [0.025, 0.018, 0.01] })),
       ...[1.18, 1.06].map((y) => ({ grp: 'body', g: SPH, m: gold, p: [0.02, y, 0.136], s: [0.012, 0.012, 0.006] })),
       { grp: 'body', g: BOXG, m: gold, p: [0.11, 1.3, 0.136], s: [0.05, 0.06, 0.006] },
+    ]),
+    // Turned classmate: their faded Yale sweater, Y and all, on a zombie
+    ...only('turned', [
+      { grp: 'body', g: BOXG, m: white, p: [0, 1.2, 0.133], s: [0.022, 0.09, 0.01] },
+      { grp: 'body', g: BOXG, m: white, p: [-0.028, 1.285, 0.133], r: [0, 0, 0.55], s: [0.022, 0.1, 0.01] },
+      { grp: 'body', g: BOXG, m: white, p: [0.028, 1.285, 0.133], r: [0, 0, -0.55], s: [0.022, 0.1, 0.01] },
+      { grp: 'body', g: BOXG, m: L.dark, p: [0.09, 1.02, 0.134], r: [0, 0, 0.4], s: [0.06, 0.03, 0.008] }, // a rip
     ]),
     // Mimic (Labubu thief): a Yale disguise. Navy sweater with a white Y and a Yale beanie, but the face
     // is still zombie green and the eyes still glow
@@ -498,9 +507,7 @@ if (import.meta.env.DEV) window.__rivals = S
 if (import.meta.env.DEV)
   window.__spawnKind = (kind, x, z) => {
     const q = S.zombies.find((o) => !o.on)
-    if (!q || !spawnZombie(S.player || { x, z }, kind === 'mimic', { at: { x, z } })) return null
-    Object.assign(q, { kind, costume: kind, scale: KINDS[kind].scale || 1 })
-    tintZombie(S.zombies.indexOf(q), kind)
+    if (!q || !spawnZombie(S.player || { x, z }, kind === 'mimic', { at: { x, z }, kind })) return null
     return q
   }
 
@@ -1078,11 +1085,11 @@ function tintZombie(i, kind) {
   })
 }
 
-function spawnZombie(p, thief, { boss = 0, at = null } = {}) {
+function spawnZombie(p, thief, { boss = 0, at = null, kind: forced = null } = {}) {
   const z = S.zombies.find((q) => !q.on)
   if (!z) return false
   at = at || ringPoint(p, 16, 34)
-  const kind = thief ? 'mimic' : boss ? 'freshman' : pickKind(S.wave)
+  const kind = forced || (thief ? 'mimic' : boss ? 'freshman' : pickKind(S.wave))
   const K = KINDS[kind]
   const hp = boss ? Math.round(70 * boss ** 1.35 + S.wave * 4) : (4 + S.wave * 0.6) * K.hp
   Object.assign(z, { on: true, x: at.x, z: at.z, y: 0, yaw: 0, hp, maxHp: hp, down: false, downT: 0, moving: true, attacking: false, flash: 0, stun: 0, burn: 0, retarget: 0, target: null, thief: null, boss: null, kind, costume: kind, scale: K.scale || 1, throwT: 1 + Math.random() * 2, stalker: Math.random() < STALKER_SHARE, age: 0, ...navInit() })
@@ -1345,6 +1352,17 @@ function rescueLost(z) {
   const ri = nearestRing([z.x, z.z])
   ;[z.x, z.z] = lanePt(ri, 0)
   Object.assign(z, { ri, los: false, losT: 0, stuckN: 0 })
+}
+
+// a fallen classmate who wasn't saved rises as a Harvard zombie, right where they fell
+let turnBannerT = 0
+function turnClassmate(s) {
+  const z = S.zombies.find((q) => !q.on)
+  const first = !S.seenKinds.has('turned')
+  if (!z || !spawnZombie(S.player || s, false, { at: { x: s.x, z: s.z }, kind: 'turned' })) return
+  Object.assign(z, { stun: 1.2, yaw: s.yaw }) // a stagger as they rise
+  if (!first && performance.now() > turnBannerT) banner('🧟 A classmate turned!', 1600)
+  turnBannerT = performance.now() + 6000
 }
 
 // Hasty Pudding Chef: keeps 5-11 m from its target and lobs puddings. Returns false when it's close enough
@@ -2124,8 +2142,9 @@ export default function Rivals() {
         if (s.down) {
           s.downT += dt
           if (s.downT > KO_TIME) {
-            s.on = false // gone for good: recruit replacements at Admissions
+            s.on = false // they rise for Harvard: recruit replacements at Admissions
             s.target = null
+            turnClassmate(s)
             pushHud()
           }
           continue

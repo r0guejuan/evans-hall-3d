@@ -516,8 +516,8 @@ export default function App() {
             <div className="kicker">🎓 Yale Admissions · open all night</div>
             <h2>💰 ${endowment.toLocaleString()}</h2>
             <p className="sub">
-              You have <b>{classmates}</b> classmate{classmates === 1 ? '' : 's'} fighting for you. Fallen classmates are gone for good, so recruit
-              replacements here. New recruits report in at this desk.
+              You have <b>{classmates}</b> classmate{classmates === 1 ? '' : 's'} fighting for you. Fallen classmates rise as Harvard zombies, so
+              recruit replacements here. New recruits report in at this desk.
             </p>
             <div className="shopgrid">
               {[
@@ -728,7 +728,7 @@ export default function App() {
             <p className="rules">
               🧟 Harvard zombies are loose in Evans Hall, in growing waves. Fight with business school gear: kills earn <b>Endowment</b> to spend at the
               Endowment Office between waves, and Handsome Dan fights at your side. ⚡ Answer the professors' questions for <b>power-ups</b> (study notes with the
-              answers are hidden around the building). ☕ Hurt? Grab coffee at the <b>snack table</b> in the south cloister (☕ on the map); 🎓 <b>Admissions</b> is right next to it. Fallen classmates are gone for good, so recruit more there. 👑 Every 4th wave brings a <b>boss</b>, and every 3rd hides a 🧩 <b>puzzle</b> that unlocks a super weapon. 😱 Don't let them steal the{' '}
+              answers are hidden around the building). ☕ Hurt? Grab coffee at the <b>snack table</b> in the south cloister (☕ on the map); 🎓 <b>Admissions</b> is right next to it. Fallen classmates rise as Harvard zombies, so recruit more there. 👑 Every 4th wave brings a <b>boss</b>, and every 3rd hides a 🧩 <b>puzzle</b> that unlocks a super weapon. 😱 Don't let them steal the{' '}
               <b>Labubu</b> off Prof. Zaman in room 2200! Every wave sends thieves after it. If one grabs it, drop the thief, pick up the Labubu, and bring it back to him within 90 seconds or the game is over.
             </p>
             <button className="go">{isTouch ? 'Tap to walk in' : 'Click to walk in'}</button>
