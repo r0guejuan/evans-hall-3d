@@ -94,8 +94,8 @@ export default function App() {
   useEffect(() => {
     if (!banner) return
     const id = Math.random()
-    setToasts((ts) => [...ts.slice(-2), { id, text: banner }])
-    const ms = Math.min(7000, 3200 + banner.length * 30)
+    const ms = Math.min(4000, 1800 + banner.length * 20) // long enough to read, then gone
+    setToasts((ts) => [...ts.slice(-2), { id, text: banner, ms }])
     const timer = setTimeout(() => setToasts((ts) => ts.filter((t) => t.id !== id)), ms)
     return () => clearTimeout(timer)
   }, [banner])
@@ -402,7 +402,7 @@ export default function App() {
       {playing && toasts.length > 0 && (
         <div className="toasts" role="status" aria-live="polite">
           {toasts.map((t) => (
-            <div key={t.id} className="toast">
+            <div key={t.id} className="toast" style={{ animation: `toastin 0.2s ease-out, toastout 0.4s ease-in ${(t.ms - 400) / 1000}s forwards` }}>
               {t.text}
             </div>
           ))}
