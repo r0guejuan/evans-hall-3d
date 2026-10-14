@@ -10,8 +10,9 @@ import TouchControls from './TouchControls.jsx'
 import ChatWindow from './ChatWindow.jsx'
 import WeaponWheel from './WeaponWheel.jsx'
 import { CHAT_PROFESSORS, chat, useChat } from './chat.js'
-import { COFFEE, DAN_LEVELS, RANGED, buy, canShop, drinkCoffee, freeSeats, hire, hireHero, meleeAttack, nextTraining, PUZZLE, solvePuzzle, train, resetRivals, say, sicEm, startNextWave, useRanged } from './Rivals.jsx'
-import { ADMIT, HEROES, ITEMS, MELEE, SHURIKEN, TRAINING } from './weapons.js'
+import { COFFEE, DAN_LEVELS, RANGED, buy, canShop, drinkCoffee, freeSeats, hire, hireHero, meleeAttack, nextTraining, PUZZLE, solvePuzzle, train, unlockBlaster, resetRivals, say, sicEm, startNextWave, useRanged } from './Rivals.jsx'
+import { ADMIT, HEROES, ITEMS, MELEE, POSTER_Y, SHURIKEN, TRAINING } from './weapons.js'
+import { POSTER_TILES } from './textures.js'
 import * as sfx from './sfx.js'
 import { NOTES } from './notes.js'
 import { checkAnswer, makePuzzle } from './puzzles.js'
@@ -79,6 +80,7 @@ export default function App() {
   const coffee = useChat((s) => s.coffee)
   const admissions = useChat((s) => s.admissions)
   const puzzleAim = useChat((s) => s.puzzleAim)
+  const posterAim = useChat((s) => s.posterAim)
   const talkingTo = useChat((s) => s.talkingTo)
   // the fight
   const wave = useChat((s) => s.wave)
@@ -156,6 +158,30 @@ export default function App() {
       closePuzzle()
     } else setPz({ ...makePuzzle(pz.level), level: pz.level, guess: '', wrong: pz.explain })
   }
+  // the easter egg: a close-up of the MGT 409 poster; light up a big Y on its tiles
+  const [poster, setPoster] = useState(null) // Set of lit tile indexes
+  const openPoster = useCallback(() => {
+    setPoster(new Set())
+    release()
+  }, [])
+  const closePoster = () => {
+    setPoster(null)
+    resume()
+  }
+  const toggleTile = (k) =>
+    setPoster((prev) => {
+      if (!prev || prev.has('won')) return prev
+      const next = new Set(prev)
+      next.has(k) ? next.delete(k) : next.add(k)
+      if (next.size === POSTER_Y.length && POSTER_Y.every((i) => next.has(i))) {
+        next.add('won')
+        setTimeout(() => {
+          unlockBlaster()
+          closePoster()
+        }, 900)
+      }
+      return next
+    })
   const openChat = useCallback((id) => {
     chat.set({ talkingTo: id, aiming: null })
     release() // free the mouse for typing
@@ -172,7 +198,7 @@ export default function App() {
     resume()
   }
 
-  const hud = playing && !talkingTo && !over && !reading && !shopOpen && !admitOpen && !pz
+  const hud = playing && !talkingTo && !over && !reading && !shopOpen && !admitOpen && !pz && !poster
   useEffect(() => chat.set({ simRunning: hud }), [hud]) // the fight freezes while paused, chatting, reading, or shopping
   useEffect(() => {
     if (!hud) chat.set({ wheelOpen: false })
@@ -185,6 +211,7 @@ export default function App() {
       if (st.coffee) return drinkCoffee(), true
       if (st.admissions) return openAdmit(), true
       if (st.puzzleAim) return openPuzzle(), true
+      if (st.posterAim) return openPoster(), true
       if (st.vending) return openShop(), true
       if (st.note != null) return openNote(st.note), true
       if (st.aiming) return openChat(st.aiming), true
@@ -220,15 +247,16 @@ export default function App() {
       window.removeEventListener('keydown', onInput)
       window.removeEventListener('contextmenu', noMenu)
     }
-  }, [openChat, openNote, openShop, openAdmit, openPuzzle])
+  }, [openChat, openNote, openShop, openAdmit, openPuzzle, openPoster])
 
   // the one thing under the crosshair you can interact with (zombies win; you swing at those)
-  const target = zombie != null ? null : coffee ? 'coffee' : admissions ? 'admissions' : puzzleAim ? 'puzzle' : vending ? 'vending' : note != null ? 'note' : aiming ? 'prof' : null
+  const target = zombie != null ? null : coffee ? 'coffee' : admissions ? 'admissions' : puzzleAim ? 'puzzle' : posterAim ? 'poster' : vending ? 'vending' : note != null ? 'note' : aiming ? 'prof' : null
   const hint = {
     coffee: coffeeIn > 0 ? [`☕ The urn is refilling: ${coffeeIn}s`, null] : hp >= 100 ? ['☕ Coffee & snacks (you’re at full health)', null] : [`to grab coffee ☕ (+${COFFEE.heal} health)`, drinkCoffee],
     vending: ['to open the Endowment Office 🏛️', openShop],
     admissions: ['to visit Admissions 🎓 (recruit classmates)', openAdmit],
     puzzle: ['to open the Case Competition puzzle 🧩', openPuzzle],
+    poster: ['to take a closer look 🖼️', openPoster],
     note: ['to read the study note 📜', () => openNote(note)],
     prof: [`to talk to ${CHAT_PROFESSORS[aiming]?.name}`, () => openChat(aiming)],
   }[target]
@@ -556,6 +584,40 @@ export default function App() {
             <div className="shopfoot">
               <button className="go" onClick={closeAdmit} autoFocus>
                 Back to the fight
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {poster && (
+        <div className="overlay notecard-wrap">
+          <div className="card posterzoom" role="dialog" aria-label="MGT 409 poster">
+            <div className="ptitle">MGT 409</div>
+            <div className="psub">
+              Lecture 13
+              <br />
+              Walk the floor.
+            </div>
+            <div className={poster.has('won') ? 'ptiles won' : 'ptiles'}>
+              {POSTER_TILES.map((color, k) => (
+                <button
+                  key={k}
+                  className={poster.has(k) ? 'lit' : ''}
+                  style={{ background: color }}
+                  onClick={() => toggleTile(k)}
+                  aria-label={`Tile ${Math.floor(k / 5) + 1}, ${(k % 5) + 1}`}
+                  aria-pressed={poster.has(k)}
+                />
+              ))}
+            </div>
+            <p className="phint">{poster.has('won') ? 'Boola boola!' : 'The tiles light up when you tap them. Mother Yale likes her initial big.'}</p>
+            <div className="shopfoot">
+              <button className="go alt" onClick={() => setPoster(new Set())}>
+                Clear
+              </button>
+              <button className="go alt" onClick={closePoster}>
+                Step back
               </button>
             </div>
           </div>

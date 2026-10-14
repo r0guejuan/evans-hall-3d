@@ -272,14 +272,17 @@ export function posterTex() {
   g.fillStyle = '#ffffff'
   g.fillText('Lecture 13', 40, 160)
   g.fillText('Walk the floor.', 40, 200)
-  const r = rng(9)
-  for (let i = 0; i < 6; i++)
-    for (let j = 0; j < 5; j++) {
-      g.fillStyle = `hsl(${320 + r() * 40}, 70%, ${35 + r() * 35}%)`
-      g.fillRect(40 + j * 66, 260 + i * 80, 58, 70)
-    }
+  POSTER_TILES.forEach((color, k) => {
+    g.fillStyle = color
+    g.fillRect(40 + (k % 5) * 66, 260 + Math.floor(k / 5) * 80, 58, 70)
+  })
   return tex(c)
 }
+// the poster's 6 rows x 5 columns of pink tiles (the easter egg's close-up uses the same colors)
+export const POSTER_TILES = (() => {
+  const r = rng(9)
+  return Array.from({ length: 30 }, () => `hsl(${320 + r() * 40}, 70%, ${35 + r() * 35}%)`)
+})()
 
 export function signTex(name, num) {
   const [c, g] = canvas(256, 320)

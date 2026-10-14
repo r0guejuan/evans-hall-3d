@@ -23,6 +23,8 @@ const M = {
   card: onTop('#f7f5ef', { roughness: 0.4 }),
   steel: onTop('#b9bec6', { metalness: 0.85, roughness: 0.3 }),
   red: onTop('#b3262e'),
+  blaster: onTop('#00356b', { metalness: 0.5, roughness: 0.35 }),
+  blasterGlow: onTop('#7fb2ff', { emissive: '#4a90ff', emissiveIntensity: 4 }),
 }
 const CYL = new THREE.CylinderGeometry(1, 1, 1, 14)
 const BOX = new THREE.BoxGeometry(1, 1, 1)
@@ -136,6 +138,7 @@ export default function Hands() {
   // the left hand shows whatever long-range item is picked on the weapon wheel
   const card = ranged === 'cards' && inv?.cards > 0
   const thermos = ranged === 'thermos' && inv?.thermos > 0
+  const blaster = ranged === 'blaster' && inv?.blaster != null
   return createPortal(
     <group>
       <group ref={right}>
@@ -181,6 +184,15 @@ export default function Hands() {
             <P g={CYL} m={M.card} s={[0.042, 0.11, 0.042]} />
             <P g={CYL} m={M.red} p={[0, 0.06, 0]} s={[0.045, 0.015, 0.045]} />
           </group>
+          {blaster && (
+            // the Bulldog Blaster: a chunky Yale-blue ray gun with a glowing tip
+            <group position={[0.0, 0.05, -0.55]} rotation={[0.05, 0, 0.1]}>
+              <P m={M.blaster} s={[0.07, 0.08, 0.2]} />
+              <P g={CYL} m={M.steel} p={[0, 0.01, -0.14]} r={[Math.PI / 2, 0, 0]} s={[0.022, 0.12, 0.022]} />
+              <P g={CYL} m={M.blasterGlow} p={[0, 0.01, -0.21]} r={[Math.PI / 2, 0, 0]} s={[0.028, 0.02, 0.028]} />
+              <P m={M.blaster} p={[0, -0.07, 0.05]} r={[0.3, 0, 0]} s={[0.05, 0.1, 0.05]} />
+            </group>
+          )}
           {thermos && (
             // a steel coffee thermos with a red cap
             <group position={[0.0, 0.06, -0.53]} rotation={[-0.2, 0, 0.15]}>

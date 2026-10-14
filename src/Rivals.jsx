@@ -2,13 +2,13 @@ import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { chat } from './chat.js'
-import { BOUNDS, COLLIDERS, DRUMS, collide, floorAt } from './layout.js'
+import { BOUNDS, COLLIDERS, DRUMS, EAST, collide, floorAt } from './layout.js'
 import { RING, ROOMS, nearestRing, ringPath } from './nav.js'
 import { DAN } from './HandsomeDan.jsx'
 import { ZAMAN } from './Zaman.jsx'
 import Labubu from './Labubu.jsx'
 import { NOTES } from './notes.js'
-import { ADMIT, CANNON, CRASH, HEROES, ITEMS, MELEE, PUZZLE_EVERY, SHURIKEN, SUPERS, SWAN, TAKEOVER, THERMOS, TRAINING, TRAIN_EVERY, bounty } from './weapons.js'
+import { ADMIT, BLASTER, CANNON, CRASH, HEROES, ITEMS, MELEE, PUZZLE_EVERY, SHURIKEN, SUPERS, SWAN, TAKEOVER, THERMOS, TRAINING, TRAIN_EVERY, bounty } from './weapons.js'
 import * as sfx from './sfx.js'
 
 // Rivals: the game. It's night in Evans Hall and Harvard zombies (crimson sweaters, white H) shamble through
@@ -388,6 +388,9 @@ const S = {
   bolts: [], // boss projectiles: { x, y, z, vx, vz, left, dmg }
   train: { gym: 0, boxing: 0, track: 0 }, // classmate training levels (weapons.js: TRAINING)
   swanT: 0, // seconds left of a Black Swan Event
+  blasterOwned: false, // the easter egg (weapons.js: BLASTER)
+  blasterCharge: 0, // fractional charges (inv.blaster is the whole shots, for the HUD)
+  blasts: [], // Bulldog Blaster bolts in flight
   heroes: Object.fromEntries(Object.keys(HEROES).map((id) => [id, { id, on: false, phase: Math.random() * 6 }])), // the Deans (weapons.js: HEROES)
   swanTick: 0,
   kills: 0,
@@ -395,7 +398,7 @@ const S = {
   fx: [], // ground rings: { x, z, r, life, color }
   // the arsenal (see weapons.js)
   endowment: START_ENDOWMENT,
-  inv: { briefcase: false, cards: 0, thermos: 1, takeover: 0, crash: 0, gavel: false, cannon: 0, swan: 0, endowment: 0 },
+  inv: { briefcase: false, cards: 0, thermos: 1, takeover: 0, crash: 0, gavel: false, cannon: 0, swan: 0, endowment: 0, blaster: 0 },
   melee: 'wsj',
   ranged: 'thermos', // what L / right click uses (picked on the weapon wheel)
   cool: { melee: 0, card: 0, sic: 0 },
@@ -469,8 +472,8 @@ export function resetRivals() {
   for (const s of S.students) s.on = false
   DAN.golden = false
   Object.assign(S, {
-    wave: 0, toSpawn: 0, spawnT: 0, interlude: 1.5, hp: 100, shield: 0, spells: 0, weapon: null, slow: 0, labubuT: 0, thievesLeft: 0, bossDue: 0, bolts: [], train: { gym: 0, boxing: 0, track: 0 }, swanT: 0, swanTick: 0, kills: 0, started: false, fx: [],
-    endowment: START_ENDOWMENT, inv: { briefcase: false, cards: 0, thermos: 1, takeover: 0, crash: 0, gavel: false, cannon: 0, swan: 0, endowment: 0 }, melee: 'wsj', ranged: 'thermos', cool: { melee: 0, card: 0, sic: 0 }, cards: [], thermoses: [], crash: 0, cleared: false, coffeeT: 0,
+    wave: 0, toSpawn: 0, spawnT: 0, interlude: 1.5, hp: 100, shield: 0, spells: 0, weapon: null, slow: 0, labubuT: 0, thievesLeft: 0, bossDue: 0, bolts: [], train: { gym: 0, boxing: 0, track: 0 }, swanT: 0, swanTick: 0, blasterOwned: false, blasterCharge: 0, blasts: [], kills: 0, started: false, fx: [],
+    endowment: START_ENDOWMENT, inv: { briefcase: false, cards: 0, thermos: 1, takeover: 0, crash: 0, gavel: false, cannon: 0, swan: 0, endowment: 0, blaster: 0 }, melee: 'wsj', ranged: 'thermos', cool: { melee: 0, card: 0, sic: 0 }, cards: [], thermoses: [], crash: 0, cleared: false, coffeeT: 0,
   })
   for (const h of Object.values(S.heroes)) h.on = false
   Object.assign(S.dan, { cool: { bark: 0, charge: 0, howl: 0 }, level: 1, target: null, dash: 0 })
@@ -572,6 +575,30 @@ export function throwThermos() {
   act('thermos')
   const p = S.player
   S.thermoses.push({ x: p.x + S.fwd.x * 0.6, y: S.eyeY - 0.2, z: p.z + S.fwd.z * 0.6, vx: S.fwd.x * THERMOS.speed, vy: 3.5 + S.pitch * THERMOS.speed, vz: S.fwd.z * THERMOS.speed, spin: 0 })
+  sfx.whoosh()
+  pushHud()
+}
+
+// ---------- the easter egg: the MGT 409 poster on the east cloister wall (a big Y on its tiles)
+export const POSTER = { x: EAST - 0.15, y: 2.3, z: 14.8, w: 3.2, h: 3.6 }
+export function unlockBlaster() {
+  if (S.blasterOwned) return banner('🔫 You already have the Bulldog Blaster.', 2000)
+  S.blasterOwned = true
+  S.inv.blaster = S.blasterCharge = BLASTER.charges
+  S.ranged = 'blaster'
+  sfx.coin()
+  banner('🔫 EASTER EGG! Boola boola: you found the Bulldog Blaster. It recharges on its own (L / right click).', 5000)
+  pushHud()
+}
+export function fireBlaster() {
+  if (!canAct() || !S.blasterOwned || S.inv.blaster < 1 || S.cool.card > 0) return
+  S.blasterCharge -= 1
+  S.inv.blaster = Math.floor(S.blasterCharge)
+  S.cool.card = BLASTER.cooldown
+  act('card')
+  const p = S.player
+  const v = BLASTER.speed
+  S.blasts.push({ x: p.x + S.fwd.x * 0.6, z: p.z + S.fwd.z * 0.6, y: S.eyeY - 0.2 + S.pitch * 0.6, vx: S.fwd.x * v, vz: S.fwd.z * v, left: BLASTER.range / v, hits: new Set() })
   sfx.whoosh()
   pushHud()
 }
@@ -710,6 +737,7 @@ export const RANGED = {
   // super weapons (from the Case Competition puzzles)
   cannon: { name: 'Money Cannon', icon: '💸', have: () => S.inv.cannon > 0, count: () => S.inv.cannon, use: () => fireCannon() },
   swan: { name: 'Black Swan Event', icon: '🦢', have: () => S.inv.swan > 0, count: () => S.inv.swan, use: () => blackSwan() },
+  blaster: { name: 'Bulldog Blaster', icon: '🔫', have: () => S.blasterOwned && S.inv.blaster >= 1, count: () => (S.blasterOwned ? S.inv.blaster : 0), use: () => fireBlaster() },
   endowment: { name: 'The Endowment', icon: '🏛️', have: () => S.inv.endowment > 0, count: () => S.inv.endowment, use: () => unleashEndowment() },
 }
 export function useRanged() {
@@ -728,7 +756,7 @@ export function wheelOptions() {
   return [
     ...Object.entries(MELEE).map(([id, w]) => ({ id, kind: 'melee', name: w.name, icon: w.icon, count: null, ready: id === 'wsj' || !!S.inv[id], on: S.melee === id })),
     ...Object.entries(RANGED).map(([id, r]) => ({ id, kind: 'ranged', name: r.name, icon: r.icon, count: r.count(), ready: !!r.have(), on: S.ranged === id })),
-  ].filter((o) => o.ready || !SUPERS[o.id]) // super weapons only show up once a puzzle unlocks them
+  ].filter((o) => (o.id === 'blaster' ? S.blasterOwned : o.ready || !SUPERS[o.id])) // super weapons (and the easter egg) only show up once unlocked
 }
 export function equip(id) {
   if (MELEE[id]) return equipMelee(id)
@@ -1347,6 +1375,8 @@ function emojiTex(ch) {
 }
 const BOLT_GEO = new THREE.SphereGeometry(0.17, 12, 8)
 const BOLT_MAT = new THREE.MeshStandardMaterial({ color: '#7a0010', emissive: '#ff2030', emissiveIntensity: 5 })
+const BLAST_GEO = new THREE.CapsuleGeometry(0.05, 0.4, 4, 8).rotateX(Math.PI / 2)
+const BLAST_MAT = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.6, 1.4, 3.6), toneMapped: false }) // Yale blue, glowing
 
 function glowTex(color) {
   const c = document.createElement('canvas')
@@ -1687,6 +1717,8 @@ export default function Rivals() {
   const ray = useMemo(() => new THREE.Raycaster(), [])
   const tex = useMemo(() => ({ paper: paperTex(), red: glowTex('#ff3b3b'), blue: glowTex('#4aa3ff'), crown: emojiTex('👑'), quiz: emojiTex('❓'), gold: glowTex('#ffd76a') }), [])
   const boltMesh = useRef()
+  const blastMesh = useRef()
+  const posterHit = useRef()
   const crown = useRef()
   const puzzle = useRef()
   const frame = useRef(0)
@@ -2200,6 +2232,26 @@ export default function Rivals() {
         }
         return (c.left -= dt) > 0 && !wallAt(c.x, c.z, c.y) // stops at a wall, sails over benches
       })
+      // Bulldog Blaster: recharges on its own; bolts fly straight and fast, through up to 2 zombies
+      if (S.blasterOwned && S.blasterCharge < BLASTER.charges) {
+        S.blasterCharge = Math.min(BLASTER.charges, S.blasterCharge + dt / BLASTER.recharge)
+        S.inv.blaster = Math.floor(S.blasterCharge)
+      }
+      S.blasts = S.blasts.filter((b) => {
+        for (let sub = 0; sub < 3; sub++) {
+          b.x += (b.vx * dt) / 3
+          b.z += (b.vz * dt) / 3
+          for (const z of S.zombies) {
+            if (!hostile(z) || b.hits.has(z) || Math.hypot(z.x - b.x, z.z - b.z) > 0.45 * (z.scale || 1)) continue
+            b.hits.add(z)
+            z.hp -= BLASTER.damage * (S.weapon?.mult || 1)
+            z.flash = 0.2
+            sfx.hit(false)
+            if (b.hits.size >= BLASTER.pierce) return false
+          }
+        }
+        return (b.left -= dt) > 0 && !wallAt(b.x, b.z, b.y)
+      })
       // coffee thermoses: arc through the air, burst on landing
       S.thermoses = S.thermoses.filter((g) => {
         g.vy -= 12 * dt
@@ -2384,6 +2436,15 @@ export default function Rivals() {
       cardMesh.current.setMatrixAt(k, _o.matrix)
     })
     cardMesh.current.instanceMatrix.needsUpdate = true
+    blastMesh.current.count = S.blasts.length
+    S.blasts.forEach((b, k) => {
+      _o.position.set(b.x, b.y, b.z)
+      _o.rotation.set(0, Math.atan2(b.vx, b.vz), 0)
+      _o.scale.set(1, 1, 1)
+      _o.updateMatrix()
+      blastMesh.current.setMatrixAt(k, _o.matrix)
+    })
+    blastMesh.current.instanceMatrix.needsUpdate = true
     thermosMesh.current.count = S.thermoses.length
     S.thermoses.forEach((g, k) => {
       _o.position.set(g.x, g.y, g.z)
@@ -2407,6 +2468,7 @@ export default function Rivals() {
       let hitC = false
       let hitA = false
       let hitP = false
+      let hitPoster = false
       S.aim = null
       if (running && !st.talkingTo) {
         ray.setFromCamera(CENTER, camera)
@@ -2425,7 +2487,8 @@ export default function Rivals() {
           hitC = !hitV && ray.intersectObject(coffee.current, true).length > 0
           hitA = !hitV && !hitC && ray.intersectObject(admissions.current, true).length > 0
           hitP = PUZZLE.active && !hitV && !hitC && !hitA && ray.intersectObject(puzzle.current.children[0], false).length + ray.intersectObject(puzzle.current.children[1], true).length > 0
-          if (!hitV && !hitC && !hitA && !hitP) {
+          hitPoster = !S.blasterOwned && !hitV && !hitC && !hitA && !hitP && ray.intersectObject(posterHit.current, false).length > 0
+          if (!hitV && !hitC && !hitA && !hitP && !hitPoster) {
             const nh = ray.intersectObjects(notes.current.filter(Boolean), false)[0]
             if (nh) hitN = nh.object.userData.id
           }
@@ -2437,6 +2500,7 @@ export default function Rivals() {
       if (hitC !== !!st.coffee) chat.set({ coffee: hitC })
       if (hitA !== !!st.admissions) chat.set({ admissions: hitA })
       if (hitP !== !!st.puzzleAim) chat.set({ puzzleAim: hitP })
+      if (hitPoster !== !!st.posterAim) chat.set({ posterAim: hitPoster })
     }
   })
 
@@ -2472,6 +2536,12 @@ export default function Rivals() {
       </group>
       <instancedMesh ref={cardMesh} args={[CARD_GEO, CARD_MAT, 40]} frustumCulled={false} />
       <instancedMesh ref={boltMesh} args={[BOLT_GEO, BOLT_MAT, MAX_BOLTS]} frustumCulled={false} />
+      <instancedMesh ref={blastMesh} args={[BLAST_GEO, BLAST_MAT, 30]} frustumCulled={false} />
+      {/* an invisible stand-in for the MGT 409 poster, so you can aim at it (the easter egg) */}
+      <mesh ref={posterHit} position={[POSTER.x - 0.02, POSTER.y, POSTER.z]} rotation={[0, -Math.PI / 2, 0]}>
+        <planeGeometry args={[POSTER.w, POSTER.h]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
       <group ref={puzzle} visible={false}>
         <mesh position={[0, 0.45, 0]}>
           <cylinderGeometry args={[0.28, 0.34, 0.9, 16]} />

@@ -55,7 +55,7 @@ export const HEROES = {
     name: 'Assistant Dean Wendy Tsung',
     short: 'Dean Tsung',
     icon: '🌟',
-    price: 4000,
+    price: 20000,
     hp: 40,
     punch: 1.6,
     desc: 'Student Affairs Rally: every 8 seconds she heals the classmates around her, gets a fallen one back on their feet, and gives you +10 health.',
@@ -64,9 +64,15 @@ export const HEROES = {
     name: 'Dean Kerwin Charles',
     short: 'Dean Charles',
     icon: '📊',
-    price: 50000,
+    price: 40000,
     hp: 60,
     punch: 3,
     desc: 'Economic Shock: when zombies crowd him, every 10 seconds a shockwave damages and stuns them all. The hardest hitter in Evans Hall.',
   },
 }
+
+// ---------- the easter egg: light up a big Y on the MGT 409 poster (east cloister) for the Bulldog Blaster.
+// Rapid Yale-blue bolts; 20 charges that slowly refill, so it never runs dry but can't fire forever.
+export const BLASTER = { name: 'Bulldog Blaster', icon: '🔫', damage: 2.5, speed: 40, range: 35, cooldown: 0.16, pierce: 2, charges: 20, recharge: 0.5 }
+// the Y, on the poster's 5-column x 6-row grid of tiles (row-major, top row first)
+export const POSTER_Y = [0, 4, 6, 8, 12, 17, 22, 27]
