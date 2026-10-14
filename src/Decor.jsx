@@ -499,6 +499,7 @@ export default function Decor() {
         </group>
       ))}
       {/* the courtyard graveyard */}
+      <CourtyardLights />
       {layout.fires.map((f, k) => (
         <FirePit key={k} {...f} />
       ))}
@@ -589,6 +590,99 @@ function FirePit({ x, z, phase }) {
     </group>
   )
 }
+
+// ---------- string lights over the courtyard: a strand all the way around the inside of the glass (so it's
+// right in front of you from any hallway), long zig-zag strands across the graveyard between posts, and a
+// few lamps under them that actually light the lawn and the gravestones
+const CY_BULB = new THREE.SphereGeometry(0.06, 8, 6)
+const bulbMat = (c) => new THREE.MeshBasicMaterial({ color: c, toneMapped: false, fog: false })
+const CY_WARM = bulbMat(new THREE.Color(2.8, 2.0, 1.0))
+const CY_ORANGE = bulbMat(new THREE.Color(2.8, 1.0, 0.15))
+const POST_MAT = new THREE.MeshStandardMaterial({ color: '#2a2622', roughness: 0.8 })
+const WIRE_MAT = new THREE.MeshBasicMaterial({ color: '#141414' })
+function CourtyardLights() {
+  const layout = useMemo(() => {
+    const bulbs = []
+    const wires = []
+    // sag between two points: a catenary-ish curve, a bulb every 0.6 m
+    const strand = (a, b, sag) => {
+      const len = Math.hypot(b[0] - a[0], b[2] - a[2])
+      const n = Math.max(2, Math.round(len / 0.6))
+      let prev = null
+      for (let k = 0; k <= n; k++) {
+        const u = k / n
+        const p = [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u - Math.sin(u * Math.PI) * sag, a[2] + (b[2] - a[2]) * u]
+        bulbs.push({ p, orange: bulbs.length % 3 === 0 })
+        if (prev) wires.push([prev, p])
+        prev = p
+      }
+    }
+    // around the inside of the glass, 1.2 m in
+    const ring = COURTYARD.filter((_, i) => i % 6 === 0).map(([x, z]) => {
+      const l = Math.hypot(x, z) || 1
+      return [x - (x / l) * 1.2, 3.1, z - (z / l) * 1.2]
+    })
+    ring.forEach((a, i) => strand(a, ring[(i + 1) % ring.length], 0.25))
+    // posts at the north and south ends, strands zig-zagging between them
+    const xs = [-14, -7, 0, 7, 14]
+    const posts = [...xs.map((x) => [x, 3.6, -13]), ...xs.map((x) => [x, 3.6, 13])]
+    xs.forEach((x, i) => {
+      strand([x, 3.6, -13], [xs[(i + 1) % xs.length], 3.6, 13], 1.0)
+    })
+    return { bulbs, wires, posts }
+  }, [])
+  const warm = useRef()
+  const orange = useRef()
+  const wire = useRef()
+  useLayoutEffect(() => {
+    const m = new THREE.Matrix4()
+    const q = new THREE.Quaternion()
+    const one = new THREE.Vector3(1, 1, 1)
+    let nw = 0
+    let no = 0
+    for (const b of layout.bulbs) {
+      m.compose(new THREE.Vector3(...b.p), q, one)
+      if (b.orange) orange.current.setMatrixAt(no++, m)
+      else warm.current.setMatrixAt(nw++, m)
+    }
+    warm.current.count = nw
+    orange.current.count = no
+    // wire segments: thin boxes from bulb to bulb
+    const up = new THREE.Vector3(0, 0, 1)
+    layout.wires.forEach(([a, b], k) => {
+      const va = new THREE.Vector3(...a)
+      const vb = new THREE.Vector3(...b)
+      const d = vb.clone().sub(va)
+      q.setFromUnitVectors(up, d.clone().normalize())
+      m.compose(va.add(vb).multiplyScalar(0.5), q, new THREE.Vector3(0.01, 0.01, d.length()))
+      wire.current.setMatrixAt(k, m)
+    })
+    for (const r of [warm, orange, wire]) r.current.instanceMatrix.needsUpdate = true
+  }, [layout])
+  return (
+    <group>
+      <instancedMesh ref={warm} args={[CY_BULB, CY_WARM, layout.bulbs.length]} frustumCulled={false} />
+      <instancedMesh ref={orange} args={[CY_BULB, CY_ORANGE, layout.bulbs.length]} frustumCulled={false} />
+      <instancedMesh ref={wire} args={[BOX_UNIT, WIRE_MAT, layout.wires.length]} frustumCulled={false} />
+      {layout.posts.map(([x, y, z], k) => (
+        <mesh key={k} material={POST_MAT} position={[x, y / 2, z]}>
+          <cylinderGeometry args={[0.06, 0.08, y, 8]} />
+        </mesh>
+      ))}
+      {/* the lamps under the strands: these are what light up the graveyard */}
+      {[
+        [-10, -7],
+        [10, -7],
+        [0, 0],
+        [-10, 7],
+        [10, 7],
+      ].map(([x, z], k) => (
+        <pointLight key={k} position={[x, 3.0, z]} color="#ffcf8f" intensity={14} distance={18} decay={1.2} />
+      ))}
+    </group>
+  )
+}
+const BOX_UNIT = new THREE.BoxGeometry(1, 1, 1)
 
 const STEM = new THREE.CylinderGeometry(1, 0.7, 1, 6)
 const FACE = new THREE.PlaneGeometry(1, 1)
