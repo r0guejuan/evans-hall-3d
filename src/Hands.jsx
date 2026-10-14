@@ -148,6 +148,13 @@ export default function Hands() {
               <P g={CYL} m={M.ink} p={[0, 0.08, 0]} s={[0.0325, 0.02, 0.0325]} />
             </group>
           )}
+          {melee === 'gavel' && (
+            // the Golden Gavel
+            <group position={[0, 0.02, -0.52]} rotation={[-0.9, 0, 0]}>
+              <P g={CYL} m={M.brass} p={[0, 0.12, 0]} s={[0.018, 0.3, 0.018]} />
+              <P g={CYL} m={M.brass} p={[0, 0.3, 0]} r={[0, 0, Math.PI / 2]} s={[0.05, 0.2, 0.05]} />
+            </group>
+          )}
           {melee === 'briefcase' && (
             // leather briefcase by the handle
             <group position={[-0.04, -0.06, -0.56]} rotation={[0.15, 0.35, 0.1]}>

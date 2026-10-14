@@ -61,7 +61,7 @@ export default function WeaponWheel() {
 
   if (!open) return null
   const n = opts.length
-  const R = radius()
+  const R = Math.max(radius(), Math.min(190, (n * 92) / (Math.PI * 2))) // room for every slice
   const current = opts[sel]
   return (
     <div className="wheel" role="dialog" aria-label="Weapon wheel">

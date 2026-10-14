@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { BEIN, BOUNDS, COURTYARD, DRUMS, LIBRARY, MEETING, STAIRS, arc } from './layout.js'
 import { DAN } from './HandsomeDan.jsx'
-import { ADMISSIONS, COFFEE, LAB } from './Rivals.jsx'
+import { ADMISSIONS, COFFEE, LAB, PUZZLE, RIVALS } from './Rivals.jsx'
 
 const PAD = 3
 const X0 = BOUNDS.xMin - PAD
@@ -93,6 +93,25 @@ export default function Minimap({ drawRef }) {
       g.fillText('☕', kx, ky)
       const [ax, ay] = px(ADMISSIONS.x + 1.2, ADMISSIONS.z)
       g.fillText('🎓', ax, ay)
+      // the Case Competition puzzle
+      if (PUZZLE.active) {
+        const [qx, qy] = px(PUZZLE.x, PUZZLE.z)
+        g.font = 'bold 14px system-ui'
+        g.fillStyle = '#ffd76a'
+        g.fillText('❓', qx, qy)
+        g.font = '12px system-ui'
+      }
+      // the last few zombies of a wave: red dots, so none can hide
+      const left = RIVALS.zombies.filter((q) => q.on && !q.down && !(q.ally > 0))
+      if (RIVALS.toSpawn === 0 && left.length <= 3) {
+        g.fillStyle = '#ff3b3b'
+        for (const q of left) {
+          const [qx, qy] = px(q.x, q.z)
+          g.beginPath()
+          g.arc(qx, qy, 3.5, 0, Math.PI * 2)
+          g.fill()
+        }
+      }
       // the Labubu, when it's away from Prof. Zaman: on the floor, or on a thief (you carrying it: no dot)
       const lab = LAB.carrier ? [LAB.carrier.x, LAB.carrier.z] : LAB.state === 'dropped' ? [LAB.x, LAB.z] : null
       if (lab) {

@@ -301,3 +301,42 @@ export function stinger(urgent = false) {
   sub.stop(t + 1)
 }
 
+
+// thunder after a lightning flash: a deep, rolling rumble
+export function thunder() {
+  if (!ctx || muted) return
+  const t = ctx.currentTime
+  const n = noise(4)
+  const lp = ctx.createBiquadFilter()
+  lp.type = 'lowpass'
+  lp.frequency.setValueAtTime(260, t)
+  lp.frequency.exponentialRampToValueAtTime(60, t + 3.5)
+  const g = ctx.createGain()
+  g.gain.setValueAtTime(0.0001, t)
+  g.gain.exponentialRampToValueAtTime(0.55, t + 0.08)
+  g.gain.setTargetAtTime(0.3, t + 0.3, 0.3)
+  g.gain.setTargetAtTime(0.45, t + 0.9, 0.2) // a second roll
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 3.9)
+  n.connect(lp).connect(g).connect(master)
+  n.start()
+}
+
+// a power surge in the ceiling lights: an electrical buzz
+export function surge() {
+  if (!ctx || muted) return
+  const t = ctx.currentTime
+  const o = ctx.createOscillator()
+  o.type = 'sawtooth'
+  o.frequency.value = 120
+  const bp = ctx.createBiquadFilter()
+  bp.type = 'bandpass'
+  bp.frequency.value = 900
+  bp.Q.value = 2
+  const g = ctx.createGain()
+  g.gain.setValueAtTime(0.0001, t)
+  g.gain.exponentialRampToValueAtTime(0.08, t + 0.05)
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4)
+  o.connect(bp).connect(g).connect(master)
+  o.start(t)
+  o.stop(t + 1.5)
+}

@@ -14,6 +14,8 @@ import HandsomeDan from './HandsomeDan.jsx'
 import { COURSE_KEYS, slideTex } from './slides.js'
 import { PottedPlants, Trees } from './Nature.jsx'
 import Rivals from './Rivals.jsx'
+import Decor from './Decor.jsx'
+import * as sfx from './sfx.js'
 import { rng } from './textures.js'
 
 const TAU = Math.PI * 2
@@ -187,8 +189,42 @@ function Atmosphere({ M }) {
     }
   }, [gl, scene])
 
+  // lightning: every so often two or three white flashes light up the whole building, then thunder rolls in.
+  // Power surges: now and then the dead ceiling lights blaze for a second, buzzing, then die again.
   const flicker = useRef(0)
-  useFrame((_, dt) => {
+  const hemi = useRef()
+  const moon = useRef()
+  const storm = useRef({ next: 12 + Math.random() * 10, pulses: [], thunder: null, surge: 25 + Math.random() * 20, surgeLeft: 0 })
+  useFrame(({ clock }, dt) => {
+    const t = clock.elapsedTime
+    const st = storm.current
+    if (t > st.next) {
+      st.pulses = [t, t + 0.1 + Math.random() * 0.08, ...(Math.random() < 0.6 ? [t + 0.35 + Math.random() * 0.25] : [])]
+      st.thunder = t + 0.7 + Math.random() * 1.5
+      st.next = t + 18 + Math.random() * 27
+    }
+    if (st.thunder && t > st.thunder) {
+      sfx.thunder()
+      st.thunder = null
+    }
+    let f = 0
+    for (const p of st.pulses) if (t >= p) f += Math.exp(-(t - p) * 13)
+    hemi.current.intensity = 0.12 + f * 2.4
+    moon.current.intensity = 0.45 + f * 5
+    moon.current.color.setRGB(0.56 + f * 0.44, 0.65 + f * 0.35, 0.85 + f * 0.15)
+    // the ceiling lights: a surge, or the usual sputter
+    if (t > st.surge) {
+      st.surgeLeft = 0.9 + Math.random() * 0.8
+      st.surge = t + 25 + Math.random() * 30
+      sfx.surge()
+    }
+    if (st.surgeLeft > 0 || f > 0.3) {
+      st.surgeLeft -= dt
+      const k = f > 0.3 ? 2.6 : 2.2 + Math.sin(t * 90) * 0.35 // a buzzing, too-bright hum
+      M.lamp.color.setRGB(k, k * 0.98, k * 0.94)
+      flicker.current = 0
+      return
+    }
     flicker.current -= dt
     if (flicker.current <= 0) {
       const on = Math.random() < 0.18 // brief stutters of light
@@ -202,9 +238,10 @@ function Atmosphere({ M }) {
     <>
       {/* moonlight from above: casts real shadows (the ceiling doesn't cast, so it reads like light
           spilling through the building, not a lid) */}
-      <hemisphereLight args={['#3a4a6a', '#0a0a10', 0.12]} />
+      <hemisphereLight ref={hemi} args={['#3a4a6a', '#0a0a10', 0.12]} />
       <ambientLight intensity={0.02} />
       <directionalLight
+        ref={moon}
         position={[14, 45, 9]}
         intensity={0.45}
         color="#8fa6d8"
@@ -624,6 +661,7 @@ export default function World() {
       <Faculty />
       <HandsomeDan />
       <Rivals />
+      <Decor />
       <ShadowFlags M={M} />
     </>
   )

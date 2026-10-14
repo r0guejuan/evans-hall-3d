@@ -10,10 +10,11 @@ import TouchControls from './TouchControls.jsx'
 import ChatWindow from './ChatWindow.jsx'
 import WeaponWheel from './WeaponWheel.jsx'
 import { CHAT_PROFESSORS, chat, useChat } from './chat.js'
-import { COFFEE, DAN_LEVELS, RANGED, buy, canShop, drinkCoffee, freeSeats, hire, meleeAttack, resetRivals, say, sicEm, startNextWave, useRanged } from './Rivals.jsx'
-import { ADMIT, ITEMS, MELEE, SHURIKEN } from './weapons.js'
+import { COFFEE, DAN_LEVELS, RANGED, buy, canShop, drinkCoffee, freeSeats, hire, meleeAttack, nextTraining, PUZZLE, solvePuzzle, train, resetRivals, say, sicEm, startNextWave, useRanged } from './Rivals.jsx'
+import { ADMIT, ITEMS, MELEE, SHURIKEN, TRAINING } from './weapons.js'
 import * as sfx from './sfx.js'
 import { NOTES } from './notes.js'
+import { checkAnswer, makePuzzle } from './puzzles.js'
 import { EYE, SPAWN } from './layout.js'
 
 // Crimson Tide of the Dead: Harvard zombies vs. Yale in Evans Hall at night.
@@ -77,6 +78,7 @@ export default function App() {
   const vending = useChat((s) => s.vending)
   const coffee = useChat((s) => s.coffee)
   const admissions = useChat((s) => s.admissions)
+  const puzzleAim = useChat((s) => s.puzzleAim)
   const talkingTo = useChat((s) => s.talkingTo)
   // the fight
   const wave = useChat((s) => s.wave)
@@ -94,6 +96,7 @@ export default function App() {
   const labubuState = useChat((s) => s.labubuState) || 'home'
   const classmates = useChat((s) => s.classmates) ?? 0
   const boss = useChat((s) => s.boss)
+  const training = useChat((s) => s.train) || {}
   const coffeeIn = useChat((s) => s.coffeeIn) || 0
   // the arsenal + the Endowment Office (shop)
   const endowment = useChat((s) => s.endowment) ?? 0
@@ -135,6 +138,23 @@ export default function App() {
     setAdmitOpen(false)
     resume()
   }
+  // the Case Competition puzzle: a fresh case each time you open it (and after a wrong answer)
+  const [pz, setPz] = useState(null) // { ...puzzle, level, guess, wrong }
+  const openPuzzle = useCallback(() => {
+    if (!PUZZLE.active) return
+    setPz({ ...makePuzzle(PUZZLE.level), level: PUZZLE.level, guess: '', wrong: null })
+    release()
+  }, [])
+  const closePuzzle = () => {
+    setPz(null)
+    resume()
+  }
+  const answerPuzzle = (raw) => {
+    if (checkAnswer(pz, raw)) {
+      solvePuzzle()
+      closePuzzle()
+    } else setPz({ ...makePuzzle(pz.level), level: pz.level, guess: '', wrong: pz.explain })
+  }
   const openChat = useCallback((id) => {
     chat.set({ talkingTo: id, aiming: null })
     release() // free the mouse for typing
@@ -151,7 +171,7 @@ export default function App() {
     resume()
   }
 
-  const hud = playing && !talkingTo && !over && !reading && !shopOpen && !admitOpen
+  const hud = playing && !talkingTo && !over && !reading && !shopOpen && !admitOpen && !pz
   useEffect(() => chat.set({ simRunning: hud }), [hud]) // the fight freezes while paused, chatting, reading, or shopping
   useEffect(() => {
     if (!hud) chat.set({ wheelOpen: false })
@@ -163,6 +183,7 @@ export default function App() {
     const interact = (st) => {
       if (st.coffee) return drinkCoffee(), true
       if (st.admissions) return openAdmit(), true
+      if (st.puzzleAim) return openPuzzle(), true
       if (st.vending) return openShop(), true
       if (st.note != null) return openNote(st.note), true
       if (st.aiming) return openChat(st.aiming), true
@@ -198,14 +219,15 @@ export default function App() {
       window.removeEventListener('keydown', onInput)
       window.removeEventListener('contextmenu', noMenu)
     }
-  }, [openChat, openNote, openShop, openAdmit])
+  }, [openChat, openNote, openShop, openAdmit, openPuzzle])
 
   // the one thing under the crosshair you can interact with (zombies win; you swing at those)
-  const target = zombie != null ? null : coffee ? 'coffee' : admissions ? 'admissions' : vending ? 'vending' : note != null ? 'note' : aiming ? 'prof' : null
+  const target = zombie != null ? null : coffee ? 'coffee' : admissions ? 'admissions' : puzzleAim ? 'puzzle' : vending ? 'vending' : note != null ? 'note' : aiming ? 'prof' : null
   const hint = {
     coffee: coffeeIn > 0 ? [`☕ The urn is refilling: ${coffeeIn}s`, null] : hp >= 100 ? ['☕ Coffee & snacks (you’re at full health)', null] : [`to grab coffee ☕ (+${COFFEE.heal} health)`, drinkCoffee],
     vending: ['to open the Endowment Office 🏛️', openShop],
     admissions: ['to visit Admissions 🎓 (recruit classmates)', openAdmit],
+    puzzle: ['to open the Case Competition puzzle 🧩', openPuzzle],
     note: ['to read the study note 📜', () => openNote(note)],
     prof: [`to talk to ${CHAT_PROFESSORS[aiming]?.name}`, () => openChat(aiming)],
   }[target]
@@ -412,7 +434,7 @@ export default function App() {
             <div className="shopgrid">
               {[
                 ...Object.entries(MELEE)
-                  .filter(([id]) => id !== 'wsj')
+                  .filter(([id, w]) => id !== 'wsj' && !w.super)
                   .map(([id, w]) => ({ id, ...w, kind: 'Melee', owned: !!inv[id] })),
                 { id: 'cards', ...SHURIKEN, kind: `Long range · box of ${SHURIKEN.pack}`, count: inv.cards || 0 },
                 ...Object.entries(ITEMS).map(([id, it]) => ({ id, ...it, kind: 'Long range · pick it on the wheel', count: inv[id] || 0 })),
@@ -472,9 +494,82 @@ export default function App() {
                 </div>
               ))}
             </div>
+            <h3 className="shophead">🏋️ Classmate training</h3>
+            <p className="sub">Upgrades every classmate, now and future. A new level opens after each boss (waves 4, 8, 12).</p>
+            <div className="shopgrid">
+              {Object.entries(TRAINING).map(([id, t]) => {
+                const lvl = training[id] || 0
+                const next = nextTraining(id)
+                return (
+                  <div key={id} className={next ? 'item' : 'item owned'}>
+                    <div className="icon">{t.icon}</div>
+                    <div>
+                      <b>
+                        {t.name} {'★'.repeat(lvl)}
+                        {'☆'.repeat(t.prices.length - lvl)}
+                      </b>
+                      <small>{next ? (next.locked ? `level ${next.level} opens at wave ${next.locked}` : `level ${next.level}`) : 'maxed out'}</small>
+                      <p>{t.desc}</p>
+                    </div>
+                    <button className="go" disabled={!next || !!next.locked || endowment < next.price} onClick={() => train(id)} aria-label={`Train: ${t.name}`}>
+                      {!next ? 'Maxed' : next.locked ? `Wave ${next.locked}` : `$${next.price.toLocaleString()}`}
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
             <div className="shopfoot">
               <button className="go" onClick={closeAdmit} autoFocus>
                 Back to the fight
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pz && (
+        <div className="overlay notecard-wrap">
+          <div className="card shop puzzle" role="dialog" aria-label="Case Competition puzzle">
+            <div className="kicker">🧩 Case Competition · level {pz.level}</div>
+            <h2>{pz.title}</h2>
+            {pz.wrong && <p className="wrong">Not quite ({pz.wrong}). Here's a fresh case:</p>}
+            {pz.prompt.map((line, k) => (
+              <p key={k} className="q">
+                {line}
+              </p>
+            ))}
+            {pz.kind === 'choice' ? (
+              <div className="choices">
+                {pz.options.map((o) => (
+                  <button key={o} className="go alt" onClick={() => answerPuzzle(o)}>
+                    {o}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <form
+                className="answer"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  answerPuzzle(pz.guess)
+                }}
+              >
+                <input
+                  autoFocus
+                  inputMode={pz.kind === 'code' ? 'numeric' : 'decimal'}
+                  placeholder={pz.kind === 'code' ? 'vault code' : 'your answer'}
+                  value={pz.guess}
+                  onChange={(e) => setPz({ ...pz, guess: e.target.value })}
+                  aria-label="Your answer"
+                />
+                <button className="go" type="submit" disabled={!pz.guess.trim()}>
+                  Submit
+                </button>
+              </form>
+            )}
+            <div className="shopfoot">
+              <button className="go alt" onClick={closePuzzle}>
+                Not now
               </button>
             </div>
           </div>
@@ -536,7 +631,7 @@ export default function App() {
             <p className="rules">
               🧟 Harvard zombies are loose in Evans Hall, in growing waves. Fight with business school gear: kills earn <b>Endowment</b> to spend at the
               Endowment Office between waves, and Handsome Dan fights at your side. ⚡ Answer the professors' questions for <b>power-ups</b> (study notes with the
-              answers are hidden around the building). ☕ Hurt? Grab coffee at the <b>snack table</b> in the south cloister (☕ on the map); 🎓 <b>Admissions</b> is right next to it. Fallen classmates are gone for good, so recruit more there. 👑 Every 4th wave brings a <b>boss</b>. 😱 Don't let them steal the{' '}
+              answers are hidden around the building). ☕ Hurt? Grab coffee at the <b>snack table</b> in the south cloister (☕ on the map); 🎓 <b>Admissions</b> is right next to it. Fallen classmates are gone for good, so recruit more there. 👑 Every 4th wave brings a <b>boss</b>, and every 3rd hides a 🧩 <b>puzzle</b> that unlocks a super weapon. 😱 Don't let them steal the{' '}
               <b>Labubu</b> off Prof. Zaman in room 2200! Every wave sends thieves after it. If one grabs it, drop the thief, pick up the Labubu, and bring it back to him within 90 seconds or the game is over.
             </p>
             <button className="go">{isTouch ? 'Tap to walk in' : 'Click to walk in'}</button>

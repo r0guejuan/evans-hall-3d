@@ -3,7 +3,9 @@
 
 export const MELEE = {
   wsj: { name: 'Rolled-up WSJ', icon: '🗞️', price: 0, damage: 1, range: 2.4, cooldown: 0.35, stun: 0.6, knock: 0.6, desc: 'Fast, light swats. Every hit stuns for a moment.' },
-  briefcase: { name: 'Briefcase Bash', icon: '💼', price: 1500, damage: 4, range: 2.7, cooldown: 0.9, stun: 0.3, knock: 3, desc: 'Slow, heavy swing. Big damage and sends zombies flying.' },
+  briefcase: { name: 'Briefcase Bash', icon: '💼', price: 1500, damage: 4, range: 2.7, cooldown: 0.9, stun: 0.3, knock: 3, sweep: 3, desc: 'Slow, heavy swing. Big damage and sends zombies flying.' },
+  // super weapon: only from a solved Case Competition puzzle (never sold)
+  gavel: { name: 'Golden Gavel', icon: '🔨', super: true, damage: 9, range: 3.3, cooldown: 0.55, stun: 1, knock: 1.5, sweep: 6, desc: 'A solid-gold gavel: huge damage to everything in front of you, and a one-second stun.' },
 }
 
 // sold by the box: each purchase is a box of `pack` cards
@@ -25,3 +27,23 @@ export const bounty = (wave, thief, boss) => (boss ? 1500 * boss : thief ? 300 :
 
 // the Admissions desk (by the coffee table): fallen classmates are gone for good, so you recruit more
 export const ADMIT = { one: 500, five: 2250 }
+
+// classmate training, bought at Admissions. Level n unlocks at wave 4n (so: after each boss).
+export const TRAINING = {
+  gym: { name: 'Payne Whitney Gym', icon: '💪', desc: 'Classmates get +50% health per level (and current ones heal up).', prices: [1500, 3000, 5000] },
+  boxing: { name: 'Yale Boxing Club', icon: '🥊', desc: 'Classmates punch +50% harder per level.', prices: [1500, 3000, 5000] },
+  track: { name: 'Track & Field', icon: '👟', desc: 'Classmates move 15% faster per level, to catch thieves.', prices: [1200, 2500, 4000] },
+}
+export const TRAIN_EVERY = 4 // level n needs wave >= 4n
+
+// ---------- super weapons: unlocked by solving the Case Competition puzzles that appear every 3rd wave.
+// Puzzle level n unlocks the level-n weapon; past level 4, a solved puzzle refills all of them.
+export const PUZZLE_EVERY = 3
+export const SUPERS = {
+  gavel: { level: 1, name: 'Golden Gavel', icon: '🔨', kind: 'melee', desc: MELEE.gavel.desc },
+  cannon: { level: 2, name: 'Money Cannon', icon: '💸', kind: 'ranged', ammo: 12, desc: 'Fires exploding bundles of cash: a huge blast. 12 shots.' },
+  swan: { level: 3, name: 'Black Swan Event', icon: '🦢', kind: 'ranged', ammo: 2, desc: 'For 6 seconds, lightning strikes the zombies around you. 2 uses.' },
+  endowment: { level: 4, name: 'The Endowment', icon: '🏛️', kind: 'ranged', ammo: 1, desc: "Unleash Yale's endowment: every zombie in the building takes massive damage (bosses lose 30%). 1 use." },
+}
+export const CANNON = { radius: 5, damage: 11, speed: 14 }
+export const SWAN = { time: 6, every: 0.4, range: 16, damage: 5, strikes: 3 }

@@ -2,13 +2,13 @@ import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { chat } from './chat.js'
-import { COLLIDERS, DRUMS, collide, floorAt } from './layout.js'
+import { BOUNDS, COLLIDERS, DRUMS, collide, floorAt } from './layout.js'
 import { RING, ROOMS, nearestRing, ringPath } from './nav.js'
 import { DAN } from './HandsomeDan.jsx'
 import { ZAMAN } from './Zaman.jsx'
 import Labubu from './Labubu.jsx'
 import { NOTES } from './notes.js'
-import { ADMIT, CRASH, ITEMS, MELEE, SHURIKEN, TAKEOVER, THERMOS, bounty } from './weapons.js'
+import { ADMIT, CANNON, CRASH, ITEMS, MELEE, PUZZLE_EVERY, SHURIKEN, SUPERS, SWAN, TAKEOVER, THERMOS, TRAINING, TRAIN_EVERY, bounty } from './weapons.js'
 import * as sfx from './sfx.js'
 
 // Rivals: the game. It's night in Evans Hall and Harvard zombies (crimson sweaters, white H) shamble through
@@ -386,12 +386,15 @@ const S = {
   thievesLeft: 0, // Labubu thieves still to come this wave (wave N sends N)
   bossDue: 0, // tier of the boss still to come this wave (0 = none)
   bolts: [], // boss projectiles: { x, y, z, vx, vz, left, dmg }
+  train: { gym: 0, boxing: 0, track: 0 }, // classmate training levels (weapons.js: TRAINING)
+  swanT: 0, // seconds left of a Black Swan Event
+  swanTick: 0,
   kills: 0,
   started: false,
   fx: [], // ground rings: { x, z, r, life, color }
   // the arsenal (see weapons.js)
   endowment: START_ENDOWMENT,
-  inv: { briefcase: false, cards: 0, thermos: 1, takeover: 0, crash: 0 },
+  inv: { briefcase: false, cards: 0, thermos: 1, takeover: 0, crash: 0, gavel: false, cannon: 0, swan: 0, endowment: 0 },
   melee: 'wsj',
   ranged: 'thermos', // what L / right click uses (picked on the weapon wheel)
   cool: { melee: 0, card: 0, sic: 0 },
@@ -412,6 +415,9 @@ export { S as RIVALS }
 // where Prof. Zaman's Labubu is: home (on his pants), carried (by a thief), dropped (on the floor where
 // the thief went down), or player (you're running it back to him)
 export const LAB = { state: 'home', carrier: null, x: 0, z: 0 }
+
+// the Case Competition puzzle waiting somewhere in the halls (one at a time; every 3rd wave)
+export const PUZZLE = { active: false, level: 0, x: 0, z: 0, solved: 0 }
 
 // dev only: inspect the fight from the console
 if (import.meta.env.DEV) window.__rivals = S
@@ -447,6 +453,8 @@ function pushHud() {
     crash: Math.ceil(S.crash),
     coffeeIn: Math.ceil(S.coffeeT),
     classmates: S.students.filter((s) => s.on && !s.down).length,
+    train: { ...S.train },
+    puzzle: PUZZLE.active ? PUZZLE.level : 0,
   }
   const cur = chat.get()
   const changed = Object.keys(hud).some((k) => JSON.stringify(cur[k]) !== JSON.stringify(hud[k]))
@@ -459,11 +467,12 @@ export function resetRivals() {
   for (const s of S.students) s.on = false
   DAN.golden = false
   Object.assign(S, {
-    wave: 0, toSpawn: 0, spawnT: 0, interlude: 1.5, hp: 100, shield: 0, spells: 0, weapon: null, slow: 0, labubuT: 0, thievesLeft: 0, bossDue: 0, bolts: [], kills: 0, started: false, fx: [],
-    endowment: START_ENDOWMENT, inv: { briefcase: false, cards: 0, thermos: 1, takeover: 0, crash: 0 }, melee: 'wsj', ranged: 'thermos', cool: { melee: 0, card: 0, sic: 0 }, cards: [], thermoses: [], crash: 0, cleared: false, coffeeT: 0,
+    wave: 0, toSpawn: 0, spawnT: 0, interlude: 1.5, hp: 100, shield: 0, spells: 0, weapon: null, slow: 0, labubuT: 0, thievesLeft: 0, bossDue: 0, bolts: [], train: { gym: 0, boxing: 0, track: 0 }, swanT: 0, swanTick: 0, kills: 0, started: false, fx: [],
+    endowment: START_ENDOWMENT, inv: { briefcase: false, cards: 0, thermos: 1, takeover: 0, crash: 0, gavel: false, cannon: 0, swan: 0, endowment: 0 }, melee: 'wsj', ranged: 'thermos', cool: { melee: 0, card: 0, sic: 0 }, cards: [], thermoses: [], crash: 0, cleared: false, coffeeT: 0,
   })
   Object.assign(S.dan, { cool: { bark: 0, charge: 0, howl: 0 }, level: 1, target: null, dash: 0 })
   Object.assign(LAB, { state: 'home', carrier: null })
+  Object.assign(PUZZLE, { active: false, level: 0, solved: 0 })
   chat.set({ wave: 0, kills: 0, over: null, zombie: null, note: null, labubuStolen: false })
   pushHud()
 }
@@ -502,8 +511,7 @@ export function castSpell() {
     z.flash = 0.3
     z.stun = Math.max(z.stun || 0, 1)
     const push = (SPELL_RADIUS - d) * 0.35 * (z.boss ? 0.15 : 1)
-    z.x += (dx / (d || 1)) * push
-    z.z += (dz / (d || 1)) * push
+    shove(z, (dx / (d || 1)) * push, (dz / (d || 1)) * push)
   }
   S.fx.push({ x: p.x, z: p.z, r: SPELL_RADIUS, life: 0.6, max: 0.6, color: '#ff4fa3' })
   pushHud()
@@ -532,16 +540,15 @@ export function meleeAttack() {
     })
     .filter((h) => h.d <= range && h.front > 0.7) // within ~45° of where you're looking
     .sort((a, b) => a.d - b.d)
-    .slice(0, S.melee === 'briefcase' ? 3 : 1) // the briefcase swing catches a few
+    .slice(0, w.sweep || 1) // the briefcase (and the gavel) catch a few
   for (const { z, d } of hits) {
     z.hp -= w.damage * (S.weapon?.mult || 1)
     z.flash = 0.25
     z.stun = Math.max(z.stun || 0, w.stun)
     const knock = w.knock * (z.boss ? 0.15 : 1) // bosses barely budge
-    z.x += ((z.x - p.x) / (d || 1)) * knock
-    z.z += ((z.z - p.z) / (d || 1)) * knock
+    shove(z, ((z.x - p.x) / (d || 1)) * knock, ((z.z - p.z) / (d || 1)) * knock)
   }
-  if (hits.length) sfx.hit(S.melee === 'briefcase')
+  if (hits.length) sfx.hit(S.melee !== 'wsj')
   else sfx.whoosh()
 }
 
@@ -563,6 +570,81 @@ export function throwThermos() {
   const p = S.player
   S.thermoses.push({ x: p.x + S.fwd.x * 0.6, y: S.eyeY - 0.2, z: p.z + S.fwd.z * 0.6, vx: S.fwd.x * THERMOS.speed, vy: 3.5 + S.pitch * THERMOS.speed, vz: S.fwd.z * THERMOS.speed, spin: 0 })
   sfx.whoosh()
+  pushHud()
+}
+
+// ---------- super weapons
+export function fireCannon() {
+  if (!canAct() || S.inv.cannon <= 0 || S.cool.card > 0) return
+  S.inv.cannon -= 1
+  S.cool.card = 0.5
+  act('thermos')
+  const p = S.player
+  S.thermoses.push({ cash: true, x: p.x + S.fwd.x * 0.6, y: S.eyeY - 0.2, z: p.z + S.fwd.z * 0.6, vx: S.fwd.x * CANNON.speed, vy: 2.5 + S.pitch * CANNON.speed, vz: S.fwd.z * CANNON.speed, spin: 0 })
+  sfx.whoosh()
+  pushHud()
+}
+export function blackSwan() {
+  if (!canAct() || S.inv.swan <= 0 || S.swanT > 0) return
+  S.inv.swan -= 1
+  S.swanT = SWAN.time
+  S.swanTick = 0
+  banner('🦢 BLACK SWAN EVENT! Lightning strikes Harvard!', 2400)
+  sfx.thunder()
+  pushHud()
+}
+export function unleashEndowment() {
+  if (!canAct() || S.inv.endowment <= 0) return
+  S.inv.endowment -= 1
+  for (const z of S.zombies) {
+    if (!hostile(z)) continue
+    z.hp -= z.boss ? z.maxHp * 0.3 : 60
+    z.flash = 0.5
+    z.stun = Math.max(z.stun || 0, 1.5)
+  }
+  S.fx.push({ x: S.player.x, z: S.player.z, r: 30, life: 1.2, max: 1.2, color: '#ffd76a' })
+  banner("🏛️ THE ENDOWMENT IS UNLEASHED! Harvard can't compete with that.", 3000)
+  sfx.boom()
+  sfx.thunder()
+  pushHud()
+}
+
+// ---------- the Case Competition puzzle: appears every 3rd wave somewhere along the halls
+function placePuzzle(level) {
+  for (let k = 0; k < 40; k++) {
+    const ri = Math.floor(Math.random() * RING.length)
+    const [x, z] = lanePt(ri, (Math.random() < 0.5 ? -1 : 1) * (1.4 + Math.random() * 0.6))
+    if (wallAt(x, z, 0.5, 0.5) || (S.player && Math.hypot(x - S.player.x, z - S.player.z) < 12)) continue
+    Object.assign(PUZZLE, { active: true, level, x, z })
+    banner(`🧩 A Case Competition puzzle (level ${level}) appeared somewhere in Evans Hall! Find the ❓ on the map and solve it for a super weapon.`, 5000)
+    pushHud()
+    return
+  }
+}
+// solved: unlock this level's super weapon. Past level 4 (or if you skipped a puzzle), you get every
+// super weapon up to that level, with fresh ammo.
+export function solvePuzzle() {
+  const level = PUZZLE.level
+  PUZZLE.active = false
+  PUZZLE.solved += 1
+  const gave = []
+  for (const [id, w] of Object.entries(SUPERS)) {
+    const owned = w.kind === 'melee' ? S.inv[id] : S.inv[id] > 0
+    // this level's weapon, plus any earlier one you're missing (or everything, past level 4)
+    if (!(level > 4 ? w.level <= level : w.level === level || (w.level < level && !owned))) continue
+    if (w.kind === 'melee') {
+      if (S.inv[id]) continue
+      S.inv[id] = true
+      S.melee = id
+      gave.push(`${w.icon} ${w.name}`)
+    } else {
+      S.inv[id] += w.ammo
+      if (w.level === level) S.ranged = id
+      gave.push(`${w.icon} ${w.name} ×${w.ammo}`)
+    }
+  }
+  sfx.coin()
+  banner(gave.length ? `🧩 Solved! Unlocked: ${gave.join(', ')}` : '🧩 Solved!', 4000)
   pushHud()
 }
 
@@ -622,6 +704,10 @@ export const RANGED = {
   takeover: { name: 'Hostile Takeover', icon: '🤝', have: () => S.inv.takeover > 0, count: () => S.inv.takeover, use: () => hostileTakeover() },
   crash: { name: 'Market Crash', icon: '📉', have: () => S.inv.crash > 0, count: () => S.inv.crash, use: () => marketCrash() },
   spell: { name: 'Professor Spell', icon: '✨', have: () => S.spells > 0, count: () => S.spells, use: () => castSpell() },
+  // super weapons (from the Case Competition puzzles)
+  cannon: { name: 'Money Cannon', icon: '💸', have: () => S.inv.cannon > 0, count: () => S.inv.cannon, use: () => fireCannon() },
+  swan: { name: 'Black Swan Event', icon: '🦢', have: () => S.inv.swan > 0, count: () => S.inv.swan, use: () => blackSwan() },
+  endowment: { name: 'The Endowment', icon: '🏛️', have: () => S.inv.endowment > 0, count: () => S.inv.endowment, use: () => unleashEndowment() },
 }
 export function useRanged() {
   const r = RANGED[S.ranged]
@@ -639,7 +725,7 @@ export function wheelOptions() {
   return [
     ...Object.entries(MELEE).map(([id, w]) => ({ id, kind: 'melee', name: w.name, icon: w.icon, count: null, ready: id === 'wsj' || !!S.inv[id], on: S.melee === id })),
     ...Object.entries(RANGED).map(([id, r]) => ({ id, kind: 'ranged', name: r.name, icon: r.icon, count: r.count(), ready: !!r.have(), on: S.ranged === id })),
-  ]
+  ].filter((o) => o.ready || !SUPERS[o.id]) // super weapons only show up once a puzzle unlocks them
 }
 export function equip(id) {
   if (MELEE[id]) return equipMelee(id)
@@ -697,6 +783,29 @@ export function hire(n) {
   recruit(n, S.player, ADMISSIONS)
   sfx.coin()
   banner(n === 1 ? '🎓 A new classmate joins the fight!' : `🎓 ${n} new classmates join the fight!`, 2200)
+  return true
+}
+// classmate training: what each level does
+const classmateHp = () => 5 * (1 + 0.5 * S.train.gym)
+const punch = () => PUNCH * (1 + 0.5 * S.train.boxing)
+const classmateSpeed = () => S_SPEED * (1 + 0.15 * S.train.track)
+// can you buy the next level of this track now? returns { price, level } or { locked: wave } or null (maxed)
+export function nextTraining(id) {
+  const lvl = S.train[id]
+  const t = TRAINING[id]
+  if (lvl >= t.prices.length) return null
+  const wave = (lvl + 1) * TRAIN_EVERY
+  return S.wave >= wave ? { price: t.prices[lvl], level: lvl + 1 } : { locked: wave, price: t.prices[lvl], level: lvl + 1 }
+}
+export function train(id) {
+  const n = nextTraining(id)
+  if (!n || n.locked || S.endowment < n.price) return false
+  S.endowment -= n.price
+  S.train[id] += 1
+  if (id === 'gym') for (const s of S.students) if (s.on && !s.down) s.hp = classmateHp() // everyone heals up to the new max
+  sfx.coin()
+  banner(`${TRAINING[id].icon} ${TRAINING[id].name} level ${S.train[id]}: your classmates are stronger!`, 2400)
+  pushHud()
   return true
 }
 export function startNextWave() {
@@ -832,7 +941,7 @@ function spawnStudent(s, p, near = true, desk = null) {
     if (!S.students.some((o) => o !== s && o.on && Math.hypot(o.x - at.x, o.z - at.z) < 2.5)) break
   }
   if (desk) at = { x: desk.x + (Math.random() - 0.5) * 3, z: desk.z + 1.6 + Math.random() * 1.2 }
-  Object.assign(s, { on: true, x: at.x, z: at.z, y: 0, yaw: 0, hp: 5, down: false, downT: 0, moving: false, attacking: false, cool: 0, flash: 0, pace: 0.8 + Math.random() * 0.5, target: null, yieldT: 0, side: Math.random() * 2 - 1, ...navInit() })
+  Object.assign(s, { on: true, x: at.x, z: at.z, y: 0, yaw: 0, hp: classmateHp(), down: false, downT: 0, moving: false, attacking: false, cool: 0, flash: 0, pace: 0.8 + Math.random() * 0.5, target: null, yieldT: 0, side: Math.random() * 2 - 1, ...navInit() })
 }
 
 function spawnZombie(p, thief, { boss = 0, at = null } = {}) {
@@ -968,6 +1077,33 @@ function fleePath(from, p) {
   return ringPath(from, far)
 }
 
+// push someone by (dx, dz) without ever passing through a wall: small steps, each one slid along walls,
+// stopping once a wall soaks up the push (a big briefcase hit used to launch zombies clean out of the building)
+function shove(a, dx, dz) {
+  const len = Math.hypot(dx, dz)
+  if (len < 1e-4) return
+  const n = Math.ceil(len / 0.15)
+  for (let k = 0; k < n; k++) {
+    _p.x = a.x + dx / n
+    _p.z = a.z + dz / n
+    collide(_p, 2)
+    const moved = Math.hypot(_p.x - a.x, _p.z - a.z)
+    a.x = _p.x
+    a.z = _p.z
+    if (moved < (len / n) * 0.3) break // hit a wall
+  }
+}
+
+// a zombie that ended up somewhere it can't come back from (outside the building, inside a wall):
+// put it back on the cloister loop nearest to where it was
+function rescueLost(z) {
+  const out = z.x < BOUNDS.xMin - 1 || z.x > BOUNDS.xMax + 12 || z.z < BOUNDS.zMin - 1 || z.z > BOUNDS.zMax + 1
+  if (!out && !wallAt(z.x, z.z, 1.0, 0.05)) return
+  const ri = nearestRing([z.x, z.z])
+  ;[z.x, z.z] = lanePt(ri, 0)
+  Object.assign(z, { ri, los: false, losT: 0, stuckN: 0 })
+}
+
 // damage to you (the shield soaks it first)
 function hurtPlayer(dmg) {
   const soak = Math.min(S.shield, dmg)
@@ -1079,15 +1215,15 @@ function paperTex() {
   t.colorSpace = THREE.SRGBColorSpace
   return t
 }
-// a crown over the boss's head
-function crownTex() {
+// an emoji on a sprite: the boss's crown, the puzzle's question mark
+function emojiTex(ch) {
   const c = document.createElement('canvas')
   c.width = c.height = 128
   const g = c.getContext('2d')
   g.font = '96px system-ui, "Apple Color Emoji", "Segoe UI Emoji", sans-serif'
   g.textAlign = 'center'
   g.textBaseline = 'middle'
-  g.fillText('👑', 64, 70)
+  g.fillText(ch, 64, 70)
   const t = new THREE.CanvasTexture(c)
   t.colorSpace = THREE.SRGBColorSpace
   return t
@@ -1432,9 +1568,10 @@ export default function Rivals() {
   const coffee = useRef()
   const admissions = useRef()
   const ray = useMemo(() => new THREE.Raycaster(), [])
-  const tex = useMemo(() => ({ paper: paperTex(), red: glowTex('#ff3b3b'), blue: glowTex('#4aa3ff'), crown: crownTex() }), [])
+  const tex = useMemo(() => ({ paper: paperTex(), red: glowTex('#ff3b3b'), blue: glowTex('#4aa3ff'), crown: emojiTex('👑'), quiz: emojiTex('❓'), gold: glowTex('#ffd76a') }), [])
   const boltMesh = useRef()
   const crown = useRef()
+  const puzzle = useRef()
   const frame = useRef(0)
 
   useLayoutEffect(() => {
@@ -1502,6 +1639,7 @@ export default function Rivals() {
           S.interlude = 4
           S.thievesLeft = Math.min(S.wave, S.toSpawn) // wave N sends N Labubu thieves
           S.bossDue = S.wave % BOSS_EVERY === 0 ? S.wave / BOSS_EVERY : 0
+          if (S.wave % PUZZLE_EVERY === 0) placePuzzle(Math.max(PUZZLE.active ? PUZZLE.level : 0, S.wave / PUZZLE_EVERY))
           chat.set({ wave: S.wave })
           banner(S.wave === 1 ? '🧟 Harvard zombies are in the cloister! Defend Evans Hall!' : `🧟 Wave ${S.wave}: Harvard sends ${S.toSpawn} more`)
         }
@@ -1527,10 +1665,17 @@ export default function Rivals() {
       S.crash = Math.max(0, S.crash - dt)
       const zSpeed = (Z_SPEED + S.wave * 0.05) * (S.slow > 0 ? 0.3 : 1) * (S.crash > 0 ? CRASH.slow : 1)
 
+      // the last few zombies of a wave come looking for you (and show on the map), so none can hide
+      const lastFew = S.toSpawn === 0 && S.zombies.filter(hostile).length <= 3
       // zombies
       for (const z of S.zombies) {
         if (!z.on) continue
         z.flash = Math.max(0, z.flash - dt)
+        if (!z.down && (z.rescueT = (z.rescueT || 0) - dt) <= 0) {
+          z.rescueT = 1
+          rescueLost(z)
+          if (lastFew && hostile(z)) z.stalker = true
+        }
         if (z.down) {
           z.downT += dt
           if (z.downT > DOWN_TIME) z.on = false
@@ -1660,10 +1805,8 @@ export default function Rivals() {
           const d = Math.hypot(dx, dz)
           if (d < 0.9 && d > 1e-4) {
             const push = (0.9 - d) / 2
-            za.x -= (dx / d) * push
-            za.z -= (dz / d) * push
-            zb.x += (dx / d) * push
-            zb.z += (dz / d) * push
+            shove(za, -(dx / d) * push, -(dz / d) * push)
+            shove(zb, (dx / d) * push, (dz / d) * push)
           }
         }
       }
@@ -1723,18 +1866,18 @@ export default function Rivals() {
           const dz = best.z - s.z
           const l = Math.hypot(dx, dz) || 1
           const flank = Math.min(1, l / 4) * 0.9 * s.side
-          const d = navTo(s, best.x - (dz / l) * flank, best.z + (dx / l) * flank, S_SPEED * s.pace, dt, REACH * 0.85)
+          const d = navTo(s, best.x - (dz / l) * flank, best.z + (dx / l) * flank, classmateSpeed() * s.pace, dt, REACH * 0.85)
           s.attacking = d <= REACH
           s.cool -= dt
           if (s.attacking && s.cool <= 0) {
-            best.hp -= PUNCH
+            best.hp -= punch()
             best.flash = 0.2
             s.cool = 1
           }
         } else {
           // patrol: walk the cloister looking for Harvard
           s.attacking = false
-          followRing(s, S_SPEED * 0.55 * s.pace, dt)
+          followRing(s, classmateSpeed() * 0.55 * s.pace, dt)
         }
         let near = 0
         for (const o of S.students) if (o !== s && o.on && !o.down && Math.abs(o.x - s.x) < 1.3 && Math.abs(o.z - s.z) < 1.3) near++
@@ -1822,7 +1965,7 @@ export default function Rivals() {
         // Lv4 Boola Boola Howl: heals you and the squad
         if (lvl >= 4 && dan.cool.howl === 0 && S.hp > 0 && (S.hp < 70 || S.students.some((s) => s.on && !s.down && s.hp < 3))) {
           S.hp = Math.min(100, S.hp + 15)
-          for (const s of S.students) if (s.on && !s.down) s.hp = 5
+          for (const s of S.students) if (s.on && !s.down) s.hp = classmateHp()
           dan.cool.howl = 15
           S.fx.push({ x: dan.x, z: dan.z, r: 7, life: 0.8, max: 0.8, color: '#7dff9a' })
           banner('🎶 Boola Boola! Handsome Dan’s howl patches everyone up.', 2000)
@@ -1858,15 +2001,16 @@ export default function Rivals() {
         const floor = floorAt(g.x, g.z)
         const touching = S.zombies.some((z) => hostile(z) && Math.hypot(z.x - g.x, z.z - g.z) < 0.5 && g.y < floor + 1.8)
         if (g.y > floor + 0.08 && !touching && !wallAt(g.x, g.z, g.y, 0.06)) return true // bursts on the floor, a zombie, or a wall
+        const W = g.cash ? CANNON : THERMOS // a Money Cannon bundle, or a coffee thermos
         for (const z of S.zombies) {
           if (!hostile(z)) continue
           const d = Math.hypot(z.x - g.x, z.z - g.z)
-          if (d > THERMOS.radius) continue
-          z.hp -= THERMOS.damage * (1 - (d / THERMOS.radius) * 0.5)
-          z.burn = THERMOS.burnTime
+          if (d > W.radius) continue
+          z.hp -= W.damage * (1 - (d / W.radius) * 0.5)
+          if (!g.cash) z.burn = THERMOS.burnTime
           z.flash = 0.3
         }
-        S.fx.push({ x: g.x, z: g.z, r: THERMOS.radius, life: 0.7, max: 0.7, color: '#ff8a2e' })
+        S.fx.push({ x: g.x, z: g.z, r: W.radius, life: 0.7, max: 0.7, color: g.cash ? '#7dff9a' : '#ff8a2e' })
         sfx.boom()
         return false
       })
@@ -1883,6 +2027,22 @@ export default function Rivals() {
         if (S.beatT <= 0) {
           S.beatT = 0.45 + S.hp / 60
           sfx.heartbeat(1 - S.hp / 60)
+        }
+      }
+
+      // Black Swan Event: lightning strikes zombies around you
+      if (S.swanT > 0) {
+        S.swanT -= dt
+        if ((S.swanTick -= dt) <= 0) {
+          S.swanTick = SWAN.every
+          const near = S.zombies.filter((z) => hostile(z) && dist(z, p) < SWAN.range).sort(() => Math.random() - 0.5).slice(0, SWAN.strikes)
+          for (const z of near) {
+            z.hp -= SWAN.damage
+            z.flash = 0.4
+            z.stun = Math.max(z.stun || 0, 0.5)
+            S.fx.push({ x: z.x, z: z.z, r: 1.4, life: 0.4, max: 0.4, color: '#cfe8ff' })
+          }
+          if (near.length) sfx.hit(true)
         }
       }
 
@@ -1960,6 +2120,13 @@ export default function Rivals() {
       thiefLabubu.current.rotation.y = t * 1.5
     }
     thiefMark.current.scale.setScalar(0.5 + Math.sin(t * 8) * 0.1)
+    // the Case Competition puzzle: a golden case file, spinning on a pedestal
+    puzzle.current.visible = PUZZLE.active
+    if (PUZZLE.active) {
+      puzzle.current.position.set(PUZZLE.x, floorAt(PUZZLE.x, PUZZLE.z), PUZZLE.z)
+      puzzle.current.children[1].rotation.y = t * 1.2
+      puzzle.current.children[1].position.y = 1.15 + Math.sin(t * 2) * 0.06
+    }
     // the boss's crown, and its bolts in flight
     const boss = S.zombies.find((z) => z.on && !z.down && z.boss)
     crown.current.visible = !!boss
@@ -2030,6 +2197,7 @@ export default function Rivals() {
       let hitV = false
       let hitC = false
       let hitA = false
+      let hitP = false
       S.aim = null
       if (running && !st.talkingTo) {
         ray.setFromCamera(CENTER, camera)
@@ -2047,7 +2215,8 @@ export default function Rivals() {
           hitV = ray.intersectObject(vending.current, true).length > 0
           hitC = !hitV && ray.intersectObject(coffee.current, true).length > 0
           hitA = !hitV && !hitC && ray.intersectObject(admissions.current, true).length > 0
-          if (!hitV && !hitC && !hitA) {
+          hitP = PUZZLE.active && !hitV && !hitC && !hitA && ray.intersectObject(puzzle.current.children[0], false).length + ray.intersectObject(puzzle.current.children[1], true).length > 0
+          if (!hitV && !hitC && !hitA && !hitP) {
             const nh = ray.intersectObjects(notes.current.filter(Boolean), false)[0]
             if (nh) hitN = nh.object.userData.id
           }
@@ -2058,6 +2227,7 @@ export default function Rivals() {
       if (hitV !== !!st.vending) chat.set({ vending: hitV })
       if (hitC !== !!st.coffee) chat.set({ coffee: hitC })
       if (hitA !== !!st.admissions) chat.set({ admissions: hitA })
+      if (hitP !== !!st.puzzleAim) chat.set({ puzzleAim: hitP })
     }
   })
 
@@ -2093,6 +2263,28 @@ export default function Rivals() {
       </group>
       <instancedMesh ref={cardMesh} args={[CARD_GEO, CARD_MAT, 40]} frustumCulled={false} />
       <instancedMesh ref={boltMesh} args={[BOLT_GEO, BOLT_MAT, MAX_BOLTS]} frustumCulled={false} />
+      <group ref={puzzle} visible={false}>
+        <mesh position={[0, 0.45, 0]}>
+          <cylinderGeometry args={[0.28, 0.34, 0.9, 16]} />
+          <meshStandardMaterial color="#2b2433" roughness={0.6} />
+        </mesh>
+        <group>
+          <mesh>
+            <boxGeometry args={[0.42, 0.3, 0.12]} />
+            <meshStandardMaterial color="#c9a44a" metalness={0.8} roughness={0.25} emissive="#ffb320" emissiveIntensity={1.2} />
+          </mesh>
+          <mesh position={[0, 0.2, 0]}>
+            <torusGeometry args={[0.07, 0.015, 8, 16, Math.PI]} />
+            <meshStandardMaterial color="#c9a44a" metalness={0.8} roughness={0.25} />
+          </mesh>
+        </group>
+        <sprite position={[0, 1.75, 0]} scale={0.45}>
+          <spriteMaterial map={tex.quiz} transparent depthWrite={false} toneMapped={false} />
+        </sprite>
+        <sprite position={[0, 1.15, 0]} scale={1.6}>
+          <spriteMaterial map={tex.gold} transparent depthWrite={false} blending={THREE.AdditiveBlending} />
+        </sprite>
+      </group>
       <sprite ref={crown} visible={false} scale={0.6}>
         <spriteMaterial map={tex.crown} transparent depthWrite={false} toneMapped={false} />
       </sprite>

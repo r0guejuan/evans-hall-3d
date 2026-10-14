@@ -1422,3 +1422,59 @@ body,
     top: calc(env(safe-area-inset-top) + 150px);
   }
 }
+
+.card.shop .shophead {
+  margin: 8px 0 2px;
+  color: #cfe0f5;
+  font-size: 18px;
+}
+
+/* ---------- the Case Competition puzzle */
+.card.puzzle h2 {
+  color: #ffd76a;
+  font-size: 26px;
+}
+
+.card.puzzle .q {
+  margin: 6px 0;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.card.puzzle .wrong {
+  color: #ff9a9a;
+  font-size: 13px;
+}
+
+.card.puzzle .choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.card.puzzle .choices .go {
+  margin: 0;
+}
+
+.card.puzzle .answer {
+  display: flex;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.card.puzzle .answer input {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--pink);
+  background: #111;
+  color: #fff;
+  font-size: 18px;
+}
+
+.card.puzzle .answer .go {
+  width: auto;
+  margin: 0;
+}
