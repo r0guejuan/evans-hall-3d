@@ -1016,12 +1016,106 @@ function grabLabubu(z, p, msg) {
   chat.set({ labubuStolen: true })
   banner(msg, 3600)
   sfx.stinger(true) // the alarm
-  z.thief.path = fleePath(nearestRing([z.x, z.z]), p)
+  z.thief.path = routeAround(fleePath(nearestRing([z.x, z.z]), p), [z.x, z.z])
   z.thief.i = 0
   pushHud()
 }
-// a thief's route around the cloister, in through 2200's door, to Prof. Zaman (null = Zaman himself)
-const homePath = (z) => [...ringPath(nearestRing([z.x, z.z]), ZAMAN_ROOM.ring), ZAMAN_ROOM.outer, ZAMAN_ROOM.inner, null]
+// a short-range path-finder for inside a room (the podium and desks sit between the door and the professor):
+// A* over a 0.35 m grid around the two points, then string-pulled to as few straight legs as possible.
+// Returns the waypoints after `a` (ending at b), or null if there's no way through.
+const gridCache = new Map()
+function gridPath(ax, az, bx, bz) {
+  const key = [ax, az, bx, bz].map((v) => v.toFixed(1)).join(',')
+  if (gridCache.has(key)) return gridCache.get(key)
+  const C = 0.35
+  const pad = 3
+  const x0 = Math.min(ax, bx) - pad
+  const z0 = Math.min(az, bz) - pad
+  const W = Math.ceil((Math.abs(ax - bx) + 2 * pad) / C) + 1
+  const Hh = Math.ceil((Math.abs(az - bz) + 2 * pad) / C) + 1
+  const cell = (x, z) => [Math.round((x - x0) / C), Math.round((z - z0) / C)]
+  const pt = (i, j) => [x0 + i * C, z0 + j * C]
+  const blocked = new Uint8Array(W * Hh)
+  for (let j = 0; j < Hh; j++)
+    for (let i = 0; i < W; i++) {
+      const [x, z] = pt(i, j)
+      blocked[j * W + i] = wallAt(x, z, 0.3, 0.3) || wallAt(x, z, 1.0, 0.3) ? 1 : 0
+    }
+  const [si, sj] = cell(ax, az)
+  const [ti, tj] = cell(bx, bz)
+  blocked[sj * W + si] = blocked[tj * W + ti] = 0
+  const g = new Float32Array(W * Hh).fill(Infinity)
+  const from = new Int32Array(W * Hh).fill(-1)
+  const open = [[0, sj * W + si]]
+  g[sj * W + si] = 0
+  const goal = tj * W + ti
+  while (open.length) {
+    open.sort((p, q) => p[0] - q[0])
+    const [, cur] = open.shift()
+    if (cur === goal) break
+    const ci = cur % W
+    const cj = (cur - ci) / W
+    for (let dj = -1; dj <= 1; dj++)
+      for (let di = -1; di <= 1; di++) {
+        if (!di && !dj) continue
+        const ni = ci + di
+        const nj = cj + dj
+        if (ni < 0 || nj < 0 || ni >= W || nj >= Hh) continue
+        const nx = nj * W + ni
+        if (blocked[nx] || (di && dj && (blocked[cj * W + ni] || blocked[nj * W + ci]))) continue // no corner cutting
+        const ng = g[cur] + (di && dj ? 1.414 : 1)
+        if (ng < g[nx]) {
+          g[nx] = ng
+          from[nx] = cur
+          open.push([ng + Math.hypot(ti - ni, tj - nj), nx])
+        }
+      }
+  }
+  let out = null
+  if (from[goal] !== -1) {
+    const cells = []
+    for (let c = goal; c !== -1; c = from[c]) cells.push(pt(c % W, (c - (c % W)) / W))
+    cells.reverse()
+    cells[0] = [ax, az]
+    cells[cells.length - 1] = [bx, bz]
+    // string-pull: from each point, jump to the farthest one you can walk to in a straight line
+    out = []
+    let k = 0
+    while (k < cells.length - 1) {
+      let far = k + 1
+      for (let m = cells.length - 1; m > k + 1; m--) {
+        if (clearPath(cells[k][0], cells[k][1], cells[m][0], cells[m][1])) {
+          far = m
+          break
+        }
+      }
+      out.push(cells[far])
+      k = far
+    }
+  }
+  gridCache.set(key, out)
+  return out
+}
+// any leg of a route that runs into furniture (a planter or bench on the hallway centerline, the podium)
+// gets a path-finder detour
+function routeAround(pts, from) {
+  const out = []
+  let prev = from
+  for (const q of pts) {
+    if (q && prev && !clearPath(prev[0], prev[1], q[0], q[1])) {
+      const g = gridPath(prev[0], prev[1], q[0], q[1])
+      if (g) out.push(...g.slice(0, -1))
+    }
+    out.push(q)
+    if (q) prev = q
+  }
+  return out
+}
+// door -> professor (and back), around the podium
+const toZaman = () => (gridPath(...ZAMAN_ROOM.inner, ZAMAN.x, ZAMAN.z) || [[ZAMAN.x, ZAMAN.z]]).slice(0, -1)
+const fromZaman = () => (gridPath(ZAMAN.x, ZAMAN.z, ...ZAMAN_ROOM.inner) || [ZAMAN_ROOM.inner])
+// a thief's route around the cloister, in through 2200's door, around the podium to Prof. Zaman (null = Zaman himself)
+const homePath = (z) => [...routeAround([...ringPath(nearestRing([z.x, z.z]), ZAMAN_ROOM.ring), ZAMAN_ROOM.outer, ZAMAN_ROOM.inner], [z.x, z.z]), ...toZaman(), null]
 
 // what a Labubu thief does this frame. Returns false when it should just fight like any zombie
 // (someone else has the Labubu).
@@ -1038,13 +1132,21 @@ function thiefStep(z, p, speed, dt) {
     const tx = wp ? wp[0] : ZAMAN.x
     const tz = wp ? wp[1] : ZAMAN.z
     const d = step(z, tx, tz, speed * (LAB.carrier === z ? 1.5 : 1.25), dt, wp ? 0 : 0.6)
-    if (d < 0.45 || (!wp && d <= 0.7)) {
+    // failsafe: no progress for 2 s (wedged on furniture)? hop to the waypoint
+    th.stuckT = (th.stuckT || 0) + dt
+    if (th.stuckT > 2) {
+      if (th.lx != null && Math.hypot(z.x - th.lx, z.z - th.lz) < 0.3 && wp) [z.x, z.z] = wp
+      th.stuckT = 0
+      th.lx = z.x
+      th.lz = z.z
+    }
+    if (d < 0.45 || (!wp && d <= 1.0)) {
       if (th.i < th.path.length - 1) th.i += 1
       else if (LAB.state === 'home') {
         grabLabubu(z, p, `😱 A zombie grabbed Prof. Zaman’s Labubu! Stop it and bring the Labubu back within ${LABUBU_TIME} seconds or Harvard wins!`)
-        th.path = [ZAMAN_ROOM.inner, ZAMAN_ROOM.outer, ...fleePath(ZAMAN_ROOM.ring, p)] // back out the door first
+        th.path = [...fromZaman(), ...routeAround([ZAMAN_ROOM.outer, ...fleePath(ZAMAN_ROOM.ring, p)], ZAMAN_ROOM.inner)] // around the podium, out the door first
       } else {
-        th.path = fleePath(nearestRing([z.x, z.z]), p)
+        th.path = routeAround(fleePath(nearestRing([z.x, z.z]), p), [z.x, z.z])
         th.i = 0
       }
     }

@@ -1,7 +1,7 @@
 import { useLayoutEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
-import { COLLIDERS, COURTYARD, H, inPoly } from './layout.js'
+import { COLLIDERS, COURTYARD, DRUMS, H, inPoly } from './layout.js'
 import { RING } from './nav.js'
 
 // Halloween decor for Evans Hall: jack-o'-lanterns along the cloister (glowing faces, no extra lights, so
@@ -122,6 +122,174 @@ const stoneTex = (text) =>
   })
 
 const EPITAPHS = ['HARVARD\n1636–tonight', 'THE CRIMSON\nnever saw it\ncoming', 'HARVARD\nLAMPOON\nnot funny', 'CAMBRIDGE\nDREAMS', 'JOHN\nHARVARD\n(the statue)', 'SAFETY\nSCHOOL']
+
+// ---------- the SOM balloon sign (Yale-style marquee letters, Halloween colors) outside Prof. Zaman's room:
+// white block-letter frames packed with glossy orange and black balloons, and a garland of big and small
+// matte balloons cascading over the top and down the side
+const LH = 1.8 // letter height
+const SW = 0.42 // stroke width
+const FD = 0.3 // frame depth
+const arcPts = (cx, cy, r, ry, a0, a1, step = 0.12) => {
+  const out = []
+  const n = Math.max(2, Math.ceil(Math.abs(a1 - a0) / step))
+  for (let k = 0; k <= n; k++) {
+    const a = a0 + ((a1 - a0) * k) / n
+    out.push([cx + Math.cos(a) * r, cy + Math.sin(a) * ry])
+  }
+  return out
+}
+// each letter: a list of stroke centerlines, in meters (x right, y up, from the letter's bottom-left)
+const LETTERS = [
+  // S: two arcs
+  { x: 0, strokes: [[...arcPts(0.62, LH * 0.745, 0.42, LH * 0.225, 0.35, Math.PI * 1.5), ...arcPts(0.62, LH * 0.275, 0.42, LH * 0.225, Math.PI / 2, -Math.PI * 0.82)]] },
+  // O: a tall ellipse
+  { x: 1.42, strokes: [arcPts(0.6, LH / 2, 0.42, LH / 2 - SW / 2, 0, Math.PI * 2, 0.1)] },
+  // M
+  { x: 2.78, strokes: [[[0.2, SW * 0.05], [0.2, LH - SW / 2], [0.72, LH * 0.45], [1.24, LH - SW / 2], [1.24, SW * 0.05]]] },
+]
+const SIGN_W = 4.2
+
+function signLayout() {
+  const walls = [] // white marquee-letter trays: { x, y, z, len, w, d, ang } boxes
+  const backs = [] // the tray floor, dark so gaps between balloons read as depth
+  const fill = [] // { x, y, z, r, dark }
+  const garland = [] // { x, y, z, r, dark }
+  const seg = (L, ax, ay, bx, by) => ({ x: L.x + (ax + bx) / 2, y: (ay + by) / 2, len: Math.hypot(bx - ax, by - ay), ang: Math.atan2(by - ay, bx - ax), nx: -(by - ay), ny: bx - ax })
+  for (const L of LETTERS) {
+    for (const pts of L.strokes) {
+      const closed = Math.hypot(pts[0][0] - pts.at(-1)[0], pts[0][1] - pts.at(-1)[1]) < 0.05
+      for (let k = 0; k < pts.length - 1; k++) {
+        const g = seg(L, ...pts[k], ...pts[k + 1])
+        const l = Math.hypot(g.nx, g.ny)
+        backs.push({ x: g.x, y: g.y, z: -FD / 2, len: g.len + 0.05, w: SW, d: 0.03, ang: g.ang })
+        // the two side walls of the tray
+        for (const side of [-1, 1]) {
+          const o = (SW / 2 + 0.015) * side
+          walls.push({ x: g.x + (g.nx / l) * o, y: g.y + (g.ny / l) * o, z: 0, len: g.len + 0.06, w: 0.03, d: FD, ang: g.ang })
+        }
+      }
+      if (!closed) {
+        // end caps on open strokes
+        for (const [p, q] of [[pts[0], pts[1]], [pts.at(-1), pts.at(-2)]]) {
+          const ang = Math.atan2(q[1] - p[1], q[0] - p[0]) + Math.PI / 2
+          walls.push({ x: L.x + p[0], y: p[1], z: 0, len: SW + 0.06, w: 0.03, d: FD, ang })
+        }
+      }
+      // balloons packed into the tray: mixed sizes, tight, in two layers so no gaps show
+      for (const layer of [0, 1]) {
+      const placed = []
+      for (let k = 0; k < pts.length - 1; k++) {
+        const [ax, ay] = pts[k]
+        const [bx, by] = pts[k + 1]
+        const len = Math.hypot(bx - ax, by - ay)
+        const nx = -(by - ay) / len
+        const ny = (bx - ax) / len
+        for (let tries = 0; tries < len * 700; tries++) {
+          const r = [0.055, 0.07, 0.085, 0.1, 0.12, 0.14][Math.floor(rand() * 6)]
+          const u = rand()
+          const off = (rand() - 0.5) * (SW - 2 * r)
+          const x = ax + (bx - ax) * u + nx * off
+          const y = ay + (by - ay) * u + ny * off
+          if (placed.some((p) => Math.hypot(p.x - x, p.y - y) < (p.r + r) * 0.78)) continue
+          placed.push({ x, y, r })
+        }
+      }
+      for (const p of placed) fill.push({ x: L.x + p.x, y: p.y, z: FD / 2 - p.r * 0.85 - layer * 0.11 + rand() * 0.04, r: p.r, dark: rand() < 0.2 })
+      }
+    }
+  }
+  // the garland: heavy clusters over the top and cascading down the left side, mixed big and small
+  const anchors = []
+  for (let x = -0.4; x <= SIGN_W + 0.05; x += 0.3) anchors.push([x, LH + 0.05 + Math.sin(x * 2.1) * 0.14 - Math.max(0, x - 2.4) * 0.16, x < 1.6 ? 1.3 : 1])
+  for (let y = LH - 0.25; y >= 0.2; y -= 0.27) anchors.push([-0.42 + Math.sin(y * 3) * 0.1, y, 1.2])
+  for (const [ax, ay, heft] of anchors) {
+    const big = (0.15 + rand() * 0.2) * heft
+    const blackish = ax < 1.6 ? 0.6 : 0.4 // heavier black over the S, like the real ones
+    garland.push({ x: ax, y: ay, z: 0.02 + rand() * 0.18, r: big, dark: rand() < blackish })
+    for (let k = 0; k < 6; k++) {
+      const r = rand() < 0.45 ? 0.035 + rand() * 0.03 : 0.08 + rand() * 0.09 // "berries" and mid-size
+      const a = rand() * Math.PI * 2
+      const d = big + r * 0.5
+      garland.push({ x: ax + Math.cos(a) * d, y: ay + Math.sin(a) * d * 0.8, z: 0.05 + rand() * 0.32, r, dark: rand() < blackish })
+    }
+  }
+  return { walls, backs, fill, garland }
+}
+
+function BalloonSOM() {
+  // against the curved wall of room 2200, facing the corner of the cloister where everyone walks by
+  const d = DRUMS.find((q) => q.id === '2200')
+  const th = Math.PI / 6
+  const wall = [d.c[0] + d.rx * Math.sin(th), d.c[1] + d.rz * Math.cos(th)]
+  const nl = Math.hypot(Math.sin(th) / d.rx, Math.cos(th) / d.rz)
+  const n = [Math.sin(th) / d.rx / nl, Math.cos(th) / d.rz / nl] // out of the wall
+  const yaw = Math.atan2(n[0], n[1]) // letters face the hallway
+  const right = [Math.cos(yaw), -Math.sin(yaw)] // the sign's +x, as seen from the hallway
+  const base = [wall[0] + n[0] * 0.75 - (right[0] * SIGN_W) / 2, wall[1] + n[1] * 0.75 - (right[1] * SIGN_W) / 2]
+  const lay = useMemo(signLayout, [])
+  const M = useMemo(
+    () => ({
+      wall: new THREE.MeshStandardMaterial({ color: '#f4f3ef', roughness: 0.5, emissive: '#3a3a3a', emissiveIntensity: 0.3 }),
+      back: new THREE.MeshStandardMaterial({ color: '#2a1a10', roughness: 0.8 }),
+      // glossy balloons in the letters, matte ones in the garland. They glow a little so the orange stays
+      // orange under the game's drained, spooky color grade.
+      chromeO: new THREE.MeshStandardMaterial({ color: '#ff6a00', metalness: 0.5, roughness: 0.16, envMapIntensity: 3, emissive: '#ff4800', emissiveIntensity: 0.75 }),
+      chromeK: new THREE.MeshStandardMaterial({ color: '#18181c', metalness: 0.8, roughness: 0.14, envMapIntensity: 3 }),
+      latexO: new THREE.MeshStandardMaterial({ color: '#ff6000', roughness: 0.42, emissive: '#ff4400', emissiveIntensity: 0.8 }),
+      latexK: new THREE.MeshStandardMaterial({ color: '#141416', roughness: 0.38 }),
+    }),
+    [],
+  )
+  const parts = useMemo(
+    () => ({
+      walls: lay.walls,
+      backs: lay.backs,
+      fillO: lay.fill.filter((b) => !b.dark),
+      fillK: lay.fill.filter((b) => b.dark),
+      garO: lay.garland.filter((b) => !b.dark),
+      garK: lay.garland.filter((b) => b.dark),
+    }),
+    [lay],
+  )
+  const refs = useRef({})
+  useLayoutEffect(() => {
+    const m = new THREE.Matrix4()
+    const q = new THREE.Quaternion()
+    const p = new THREE.Vector3()
+    const sc = new THREE.Vector3()
+    const Z = new THREE.Vector3(0, 0, 1)
+    for (const key of ['walls', 'backs']) {
+      parts[key].forEach((f, k) => {
+        q.setFromAxisAngle(Z, f.ang)
+        m.compose(p.set(f.x, f.y, f.z), q, sc.set(f.len, f.w, f.d))
+        refs.current[key].setMatrixAt(k, m)
+      })
+    }
+    q.identity()
+    for (const key of ['fillO', 'fillK', 'garO', 'garK']) {
+      parts[key].forEach((b, k) => {
+        m.compose(p.set(b.x, b.y, b.z), q, sc.set(b.r, b.r * 1.06, b.r))
+        refs.current[key].setMatrixAt(k, m)
+      })
+    }
+    for (const r of Object.values(refs.current)) r.instanceMatrix.needsUpdate = true
+  }, [parts])
+  const mesh = (key, geo, mat, shadow) => <instancedMesh ref={(el) => (refs.current[key] = el)} args={[geo, mat, parts[key].length]} castShadow={shadow} />
+  return (
+    <group position={[base[0], 0, base[1]]} rotation={[0, yaw, 0]}>
+      {mesh('walls', BOX, M.wall, true)}
+      {mesh('backs', BOX, M.back)}
+      {mesh('fillO', BALLOON, M.chromeO)}
+      {mesh('fillK', BALLOON, M.chromeK)}
+      {mesh('garO', BALLOON, M.latexO, true)}
+      {mesh('garK', BALLOON, M.latexK, true)}
+      {/* a warm light on it, so it pops in the dark hallway */}
+      <pointLight position={[SIGN_W / 2, LH + 0.6, 2.2]} color="#ffe2c4" intensity={7} distance={9} decay={1.6} />
+    </group>
+  )
+}
+const BOX = new THREE.BoxGeometry(1, 1, 1)
+const BALLOON = new THREE.SphereGeometry(1, 20, 14)
 
 export default function Decor() {
   const M = useMemo(
@@ -270,6 +438,7 @@ export default function Decor() {
 
   return (
     <group>
+      <BalloonSOM />
       <instancedMesh ref={pBody} args={[pumpkinGeo, M.pumpkin, layout.pumpkins.length]} castShadow />
       <instancedMesh ref={pStem} args={[STEM, M.stem, layout.pumpkins.length]} />
       <instancedMesh ref={pFace} args={[FACE, M.face, layout.pumpkins.length]} />
