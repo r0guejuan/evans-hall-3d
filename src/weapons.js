@@ -77,3 +77,30 @@ export const HEROES = {
 export const BLASTER = { name: 'Ticker Tape Blaster', icon: '📈', damage: 2.5, speed: 40, range: 35, cooldown: 0.16, pierce: 2, charges: 20, recharge: 9 } // 9 s per shot: a full recharge takes 3 minutes
 // the Y, on the poster's 5-column x 6-row grid of tiles (row-major, top row first)
 export const POSTER_Y = [0, 4, 6, 8, 12, 17, 22, 27]
+
+// ---------- tuition: the $260,000 program, paid in 5 installments as you clear waves 10, 20, 30, 40, 50.
+// Short? Everything you have goes toward it and you're on Academic Probation: half your classmates take a
+// leave of absence, and the rest (plus a late fee) is due when you clear the next wave. Miss that: expelled.
+export const TUITION = { total: 260000, every: 10, payments: 5, lateFee: 0.1 }
+export const TUITION_PAYMENT = TUITION.total / TUITION.payments
+
+// ---------- the Bloomberg Terminal (Ross Library): one trade per wave. Pick a ticker and a stake, watch the
+// chart, and sell whenever you like (the market closes after 12 s). vol is per-second volatility.
+export const TICKERS = [
+  { id: 'YALE', name: 'Yale Endowment Fund', risk: 'Low risk', vol: 0.05, jump: 0 },
+  { id: 'SOM', name: 'SOM Ventures', risk: 'Medium risk', vol: 0.11, jump: 0.01 },
+  { id: 'HRVD', name: 'Harvard Short', risk: 'High risk', vol: 0.18, jump: 0.02 },
+  { id: 'BOOLA', name: 'BoolaCoin', risk: 'Meme stock', vol: 0.3, jump: 0.04 },
+]
+export const STAKES = [0.1, 0.25, 0.5, 1]
+export const TRADE_SECONDS = 12
+
+// ---------- the mysterious book (Ross Library): spells bought with Endowment. "now" spells work right away;
+// the others are charges you cast from the weapon wheel.
+export const SPELLS = {
+  embrace: { name: "Mother Yale's Embrace", icon: '💚', price: 1500, now: true, desc: 'Heals you to full, right now.' },
+  ward: { name: 'Bulldog Ward', icon: '🛡️', price: 2500, now: true, desc: 'A 60-point shield, right now.' },
+  lux: { name: 'Lux et Veritas', icon: '☀️', price: 3000, desc: 'A blinding light: every zombie within 15 m is stunned for 4 seconds (bosses: 1). A charge for your weapon wheel.' },
+  raise: { name: 'Raise the Fallen', icon: '⚰️', price: 4000, desc: 'Every Turned Classmate within 15 m becomes a Yale classmate again. A charge for your weapon wheel.' },
+  compound: { name: 'Compound Interest', icon: '💰', price: 6000, now: true, desc: 'Your Endowment grows 8% every time you clear a wave, for the next 5 waves.' },
+}

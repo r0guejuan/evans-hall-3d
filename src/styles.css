@@ -1600,3 +1600,164 @@ body,
 .overlay.won .kicker {
   color: #ffd76a;
 }
+
+/* ---------- tuition line in the Endowment Office */
+.card.shop .tuitionline {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(255, 215, 106, 0.1);
+  color: #ffd76a;
+  font-size: 13px;
+}
+
+.card.shop .tuitionline.alert {
+  background: rgba(200, 16, 46, 0.2);
+  color: #ff9a9a;
+}
+
+/* ---------- the mysterious book */
+.card.spellbook {
+  border-color: #3dff8a;
+  box-shadow: 0 0 40px rgba(61, 255, 138, 0.3);
+}
+
+.card.spellbook h2 {
+  color: #9dffc0;
+  font-family: Georgia, serif;
+  font-style: italic;
+}
+
+/* ---------- the Bloomberg Terminal */
+.card.terminal {
+  max-width: 420px;
+  background: #05060a;
+  border-color: #ff9a1a;
+  box-shadow: 0 0 40px rgba(255, 154, 26, 0.3);
+  font-family: ui-monospace, Menlo, monospace;
+}
+
+.terminal .tbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  color: #ffb347;
+  font-size: 12px;
+  border-bottom: 2px solid #1e2a6e;
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+}
+
+.terminal .tbar b {
+  color: #ff9a1a;
+  font-size: 20px;
+}
+
+.terminal .tmsg {
+  color: #ffd9a8;
+  font-size: 13px;
+}
+
+.terminal .tgrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.terminal .tgrid button,
+.terminal .tstakes button {
+  padding: 8px;
+  border: 1px solid #3a2a12;
+  border-radius: 6px;
+  background: #0d0f16;
+  color: #ffb347;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.terminal .tgrid button.on,
+.terminal .tstakes button.on {
+  border-color: #ff9a1a;
+  background: #2a1a05;
+}
+
+.terminal .tgrid b {
+  display: block;
+  font-size: 16px;
+}
+
+.terminal .tgrid small,
+.terminal .tstakes small {
+  display: block;
+  color: #c9a27a;
+  font-size: 11px;
+}
+
+.terminal .tgrid em {
+  color: #8f8f9a;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.terminal .tstakes {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.terminal .tstakes button {
+  text-align: center;
+  font-weight: 700;
+}
+
+.terminal .tquote {
+  display: flex;
+  justify-content: space-between;
+  color: #ffb347;
+  font-size: 16px;
+}
+
+.terminal .up {
+  color: #39ff7a;
+  stroke: #39ff7a;
+}
+
+.terminal .down {
+  color: #ff3b4a;
+  stroke: #ff3b4a;
+}
+
+.terminal .tchart {
+  width: 100%;
+  height: 150px;
+  margin: 8px 0 12px;
+  background: #0a0c12;
+  border: 1px solid #1e2a6e;
+}
+
+.terminal .tchart polyline {
+  fill: none;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
+}
+
+.terminal .tchart .base {
+  stroke: #3a3f55;
+  stroke-dasharray: 4 4;
+  vector-effect: non-scaling-stroke;
+}
+
+.terminal .go.sell {
+  background: #ff9a1a;
+  color: #111;
+  font-weight: 800;
+}
+
+.terminal .tresult {
+  font-size: 15px;
+  font-weight: 700;
+}

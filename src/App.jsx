@@ -10,8 +10,9 @@ import TouchControls from './TouchControls.jsx'
 import ChatWindow from './ChatWindow.jsx'
 import WeaponWheel from './WeaponWheel.jsx'
 import { CHAT_PROFESSORS, chat, useChat } from './chat.js'
-import { COFFEE, DAN_LEVELS, FINAL_WAVE, RANGED, buy, canShop, drinkCoffee, freeSeats, hire, hireHero, meleeAttack, nextTraining, PUZZLE, solvePuzzle, train, unlockBlaster, resetRivals, say, sicEm, startNextWave, useRanged } from './Rivals.jsx'
-import { ADMIT, HEROES, ITEMS, MELEE, POSTER_Y, SHURIKEN, TRAINING } from './weapons.js'
+import { COFFEE, DAN_LEVELS, FINAL_WAVE, MESSAGES, buySpell, RANGED, buy, canShop, drinkCoffee, freeSeats, hire, hireHero, meleeAttack, nextTraining, PUZZLE, solvePuzzle, train, unlockBlaster, resetRivals, say, sicEm, startNextWave, useRanged } from './Rivals.jsx'
+import { ADMIT, HEROES, ITEMS, MELEE, POSTER_Y, SHURIKEN, SPELLS, TRAINING } from './weapons.js'
+import TradeGame from './TradeGame.jsx'
 import { POSTER_TILES } from './textures.js'
 import * as sfx from './sfx.js'
 import { NOTES } from './notes.js'
@@ -81,24 +82,27 @@ export default function App() {
   const admissions = useChat((s) => s.admissions)
   const puzzleAim = useChat((s) => s.puzzleAim)
   const posterAim = useChat((s) => s.posterAim)
+  const termAim = useChat((s) => s.termAim)
+  const bookAim = useChat((s) => s.bookAim)
+  const tuition = useChat((s) => s.tuition)
+  const compound = useChat((s) => s.compound) || 0
   const talkingTo = useChat((s) => s.talkingTo)
   // the fight
   const wave = useChat((s) => s.wave)
   const kills = useChat((s) => s.kills)
   const hp = useChat((s) => s.hp) ?? 100
   const over = useChat((s) => s.over)
-  const banner = useChat((s) => s.banner)
+  const msgSeq = useChat((s) => s.msgSeq)
   // game messages: a small feed in the corner (not a big banner in the middle of the screen). Each message
   // slides in, a few stack up, and each fades after a few seconds.
   const [toasts, setToasts] = useState([])
   useEffect(() => {
-    if (!banner) return
-    const id = Math.random()
-    const ms = Math.min(4000, 1800 + banner.length * 20) // long enough to read, then gone
-    setToasts((ts) => [...ts.slice(-2), { id, text: banner, ms }])
-    const timer = setTimeout(() => setToasts((ts) => ts.filter((t) => t.id !== id)), ms)
-    return () => clearTimeout(timer)
-  }, [banner])
+    // drain everything queued since last time (two messages in the same instant both get shown)
+    const fresh = MESSAGES.splice(0).map((text) => ({ id: Math.random(), text, ms: Math.min(4000, 1800 + text.length * 20) })) // long enough to read, then gone
+    if (!fresh.length) return
+    setToasts((ts) => [...ts, ...fresh].slice(-3))
+    for (const t of fresh) setTimeout(() => setToasts((ts) => ts.filter((q) => q.id !== t.id)), t.ms)
+  }, [msgSeq])
   const shield = useChat((s) => s.shield) || 0
   const spells = useChat((s) => s.spells) || 0
   const powerWeapon = useChat((s) => s.powerWeapon)
@@ -169,6 +173,26 @@ export default function App() {
       closePuzzle()
     } else setPz({ ...makePuzzle(pz.level), level: pz.level, guess: '', wrong: pz.explain })
   }
+  // Ross Library: the Bloomberg Terminal and the mysterious book
+  const [trading, setTrading] = useState(false)
+  const [readingBook, setReadingBook] = useState(false)
+  const openTerm = useCallback(() => {
+    setTrading(true)
+    release()
+  }, [])
+  const closeTerm = () => {
+    setTrading(false)
+    resume()
+  }
+  const openBook = useCallback(() => {
+    setReadingBook(true)
+    release()
+  }, [])
+  const closeBook = () => {
+    setReadingBook(false)
+    resume()
+  }
+
   // the easter egg: a close-up of the MGT 409 poster; light up a big Y on its tiles
   const [poster, setPoster] = useState(null) // Set of lit tile indexes
   const openPoster = useCallback(() => {
@@ -209,7 +233,7 @@ export default function App() {
     resume()
   }
 
-  const hud = playing && !talkingTo && !over && !reading && !shopOpen && !admitOpen && !pz && !poster
+  const hud = playing && !talkingTo && !over && !reading && !shopOpen && !admitOpen && !pz && !poster && !trading && !readingBook
   useEffect(() => chat.set({ simRunning: hud }), [hud]) // the fight freezes while paused, chatting, reading, or shopping
   useEffect(() => {
     if (!hud) chat.set({ wheelOpen: false })
@@ -223,6 +247,8 @@ export default function App() {
       if (st.admissions) return openAdmit(), true
       if (st.puzzleAim) return openPuzzle(), true
       if (st.posterAim) return openPoster(), true
+      if (st.termAim) return openTerm(), true
+      if (st.bookAim) return openBook(), true
       if (st.vending) return openShop(), true
       if (st.note != null) return openNote(st.note), true
       if (st.aiming) return openChat(st.aiming), true
@@ -258,16 +284,18 @@ export default function App() {
       window.removeEventListener('keydown', onInput)
       window.removeEventListener('contextmenu', noMenu)
     }
-  }, [openChat, openNote, openShop, openAdmit, openPuzzle, openPoster])
+  }, [openChat, openNote, openShop, openAdmit, openPuzzle, openPoster, openTerm, openBook])
 
   // the one thing under the crosshair you can interact with (zombies win; you swing at those)
-  const target = zombie != null ? null : coffee ? 'coffee' : admissions ? 'admissions' : puzzleAim ? 'puzzle' : posterAim ? 'poster' : vending ? 'vending' : note != null ? 'note' : aiming ? 'prof' : null
+  const target = zombie != null ? null : coffee ? 'coffee' : admissions ? 'admissions' : puzzleAim ? 'puzzle' : posterAim ? 'poster' : termAim ? 'term' : bookAim ? 'book' : vending ? 'vending' : note != null ? 'note' : aiming ? 'prof' : null
   const hint = {
     coffee: coffeeIn > 0 ? [`☕ The urn is refilling: ${coffeeIn}s`, null] : hp >= 100 ? ['☕ Coffee & snacks (you’re at full health)', null] : [`to grab coffee ☕ (+${COFFEE.heal} health)`, drinkCoffee],
     vending: ['to open the Endowment Office 🏛️', openShop],
     admissions: ['to visit Admissions 🎓 (recruit classmates)', openAdmit],
     puzzle: ['to open the Case Competition puzzle 🧩', openPuzzle],
     poster: ['to take a closer look 🖼️', openPoster],
+    term: ['to log on to the Bloomberg Terminal 📈', openTerm],
+    book: ['to open the mysterious book 📖', openBook],
     note: ['to read the study note 📜', () => openNote(note)],
     prof: [`to talk to ${CHAT_PROFESSORS[aiming]?.name}`, () => openChat(aiming)],
   }[target]
@@ -338,6 +366,12 @@ export default function App() {
                 {HEROES[id].icon} {HEROES[id].short} <b>{pct}%</b>
               </span>
             ))}
+          {tuition && (
+            <span className={tuition.probation ? 'alert' : ''}>
+              {tuition.probation ? '⚠️ Probation' : '🎓 Tuition'} ${tuition.amount.toLocaleString()} due after wave {tuition.wave}
+            </span>
+          )}
+          {compound > 0 && <span>💰 interest ×{compound}</span>}
           {spells > 0 && <span>✨ ×{spells} spells</span>}
           {powerWeapon && <span>🗡️ {powerWeapon.name} {powerWeapon.left}s</span>}
           {shield > 0 && <span>🛡️ {shield}</span>}
@@ -457,6 +491,11 @@ export default function App() {
                   {HEROES[id].icon} {HEROES[id].short} {pct}%
                 </span>
               ))}
+            {tuition && (tuition.probation || tuition.wave - (wave || 1) <= 2) && (
+              <span className={tuition.probation ? 'alert' : ''}>
+                {tuition.probation ? '⚠️ Probation' : '🎓 Tuition'} ${Math.round(tuition.amount / 1000)}k · wave {tuition.wave}
+              </span>
+            )}
             {powerWeapon && <span>🗡️ {powerWeapon.name} {powerWeapon.left}s</span>}
             {slowed > 0 && <span>📚 slowed {slowed}s</span>}
             {intermission > 0 && (
@@ -494,6 +533,13 @@ export default function App() {
             <div className="kicker">🏛️ Endowment Office · between waves</div>
             <h2>💰 ${endowment.toLocaleString()}</h2>
             <p className="sub">Kills earn Endowment. Spend it wisely: the next wave won't wait forever.</p>
+            {tuition && (
+              <p className={tuition.probation ? 'tuitionline alert' : 'tuitionline'}>
+                {tuition.probation
+                  ? `⚠️ Academic Probation: $${tuition.amount.toLocaleString()} is due when you clear wave ${tuition.wave}, or you're expelled.`
+                  : `🎓 Tuition installment ${tuition.n} of 5: $${tuition.amount.toLocaleString()}, billed when you clear wave ${tuition.wave}. Keep that much in the bank!`}
+              </p>
+            )}
             <div className="shopgrid">
               {[
                 ...Object.entries(MELEE)
@@ -604,6 +650,40 @@ export default function App() {
             <div className="shopfoot">
               <button className="go" onClick={closeAdmit} autoFocus>
                 Back to the fight
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {trading && <TradeGame endowment={endowment} onClose={closeTerm} />}
+
+      {readingBook && (
+        <div className="overlay notecard-wrap">
+          <div className="card shop spellbook" role="dialog" aria-label="The mysterious book">
+            <div className="kicker">📖 A mysterious book · Ross Library</div>
+            <h2>Liber Lucis et Veritatis</h2>
+            <p className="sub">
+              Its pages are warm to the touch. Each spell costs Endowment. 💰 ${endowment.toLocaleString()}
+            </p>
+            <div className="shopgrid">
+              {Object.entries(SPELLS).map(([id, sp]) => (
+                <div key={id} className="item">
+                  <div className="icon">{sp.icon}</div>
+                  <div>
+                    <b>{sp.name}</b>
+                    <small>{sp.now ? 'works right away' : `a charge for your wheel${inv[id] ? ` · you have ${inv[id]}` : ''}`}</small>
+                    <p>{sp.desc}</p>
+                  </div>
+                  <button className="go" disabled={endowment < sp.price} onClick={() => buySpell(id)} aria-label={`Learn ${sp.name}`}>
+                    ${sp.price.toLocaleString()}
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="shopfoot">
+              <button className="go alt" onClick={closeBook} autoFocus>
+                Close the book
               </button>
             </div>
           </div>
@@ -740,9 +820,11 @@ export default function App() {
         <div className="overlay boom">
           <div className="card" role="alertdialog" aria-label="Game over">
             <div className="kicker">Game over</div>
-            <h1>{over.labubu ? '😱 Harvard escaped with the Labubu' : '🧟 Harvard took Evans Hall'}</h1>
+            <h1>{over.expelled ? '📜 Expelled!' : over.labubu ? '😱 Harvard escaped with the Labubu' : '🧟 Harvard took Evans Hall'}</h1>
             <p className="sub">
-              {over.labubu
+              {over.expelled
+                ? `You couldn't cover the $${over.owed.toLocaleString()} tuition balance, and Yale SOM had to let you go. Maybe go easier on BoolaCoin next time.`
+                : over.labubu
                 ? 'The clock ran out and the Labubu is headed to Cambridge. Prof. Zaman will never be the same.'
                 : 'The zombies got you. Your students and Handsome Dan fought bravely.'}
             </p>
@@ -778,7 +860,7 @@ export default function App() {
             <p className="rules">
               🧟 Harvard zombies are loose in Evans Hall, in growing waves. Fight with business school gear: kills earn <b>Endowment</b> to spend at the
               Endowment Office between waves, and Handsome Dan fights at your side. ⚡ Answer the professors' questions for <b>power-ups</b> (study notes with the
-              answers are hidden around the building). ☕ Hurt? Grab coffee at the <b>snack table</b> in the south cloister (☕ on the map); 🎓 <b>Admissions</b> is right next to it. Fallen classmates rise as Harvard zombies, so recruit more there. 🏁 Survive <b>{FINAL_WAVE} waves</b>, one for each year of Yale SOM, to win. 👑 Every 4th wave brings a <b>boss</b>, and every 3rd hides a 🧩 <b>puzzle</b> that unlocks a super weapon. 😱 Don't let them steal the{' '}
+              answers are hidden around the building). ☕ Hurt? Grab coffee at the <b>snack table</b> in the south cloister (☕ on the map); 🎓 <b>Admissions</b> is right next to it. Fallen classmates rise as Harvard zombies, so recruit more there. 🏁 Survive <b>{FINAL_WAVE} waves</b>, one for each year of Yale SOM, to win, and pay your <b>tuition</b> ($52,000 every 10 waves). 👑 Every 4th wave brings a <b>boss</b>, and every 3rd hides a 🧩 <b>puzzle</b> that unlocks a super weapon. 😱 Don't let them steal the{' '}
               <b>Labubu</b> off Prof. Zaman in room 2200! Every wave sends thieves after it. If one grabs it, drop the thief, pick up the Labubu, and bring it back to him within 90 seconds or the game is over.
             </p>
             <button className="go">{isTouch ? 'Tap to walk in' : 'Click to walk in'}</button>

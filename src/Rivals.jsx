@@ -8,7 +8,7 @@ import { DAN } from './HandsomeDan.jsx'
 import { ZAMAN } from './Zaman.jsx'
 import Labubu from './Labubu.jsx'
 import { NOTES } from './notes.js'
-import { ADMIT, BLASTER, CANNON, CRASH, HEROES, ITEMS, MELEE, PUZZLE_EVERY, SHURIKEN, SUPERS, SWAN, TAKEOVER, THERMOS, TRAINING, TRAIN_EVERY, bounty } from './weapons.js'
+import { ADMIT, BLASTER, CANNON, CRASH, HEROES, SPELLS, TUITION, TUITION_PAYMENT, ITEMS, MELEE, PUZZLE_EVERY, SHURIKEN, SUPERS, SWAN, TAKEOVER, THERMOS, TRAINING, TRAIN_EVERY, bounty } from './weapons.js'
 import * as sfx from './sfx.js'
 
 // Rivals: the game. It's night in Evans Hall and Harvard zombies (crimson sweaters, white H) shamble through
@@ -469,6 +469,10 @@ const S = {
   blasterCharge: 0, // fractional charges (inv.blaster is the whole shots, for the HUD)
   blasts: [], // Ticker Tape Blaster arrows in flight
   puddings: [], // Hasty Pudding Chef throws in flight
+  owed: 0, // tuition still owed (on Academic Probation when > 0)
+  installments: 0, // tuition installments billed so far (weapons.js: TUITION)
+  tradedWave: -1, // the Bloomberg Terminal: one trade per wave
+  compound: 0, // waves of Compound Interest left
   seenKinds: new Set(), // Harvard types already introduced with a banner
   heroes: Object.fromEntries(Object.keys(HEROES).map((id) => [id, { id, on: false, phase: Math.random() * 6 }])), // the Deans (weapons.js: HEROES)
   swanTick: 0,
@@ -477,7 +481,7 @@ const S = {
   fx: [], // ground rings: { x, z, r, life, color }
   // the arsenal (see weapons.js)
   endowment: START_ENDOWMENT,
-  inv: { briefcase: false, cards: 0, thermos: 1, takeover: 0, crash: 0, gavel: false, cannon: 0, swan: 0, endowment: 0, blaster: 0 },
+  inv: { briefcase: false, cards: 0, thermos: 1, takeover: 0, crash: 0, gavel: false, cannon: 0, swan: 0, endowment: 0, blaster: 0, lux: 0, raise: 0 },
   melee: 'wsj',
   ranged: 'thermos', // what L / right click uses (picked on the weapon wheel)
   cool: { melee: 0, card: 0, sic: 0 },
@@ -512,11 +516,11 @@ if (import.meta.env.DEV)
     return q
   }
 
-let bannerTimer
-const banner = (text, ms = 2800) => {
-  chat.set({ banner: text })
-  clearTimeout(bannerTimer)
-  bannerTimer = setTimeout(() => chat.set({ banner: null }), ms)
+// game messages: queued, so two in the same instant both reach the corner feed (App.jsx drains MESSAGES)
+export const MESSAGES = []
+const banner = (text) => {
+  MESSAGES.push(text)
+  chat.set({ msgSeq: (chat.get().msgSeq || 0) + 1 })
 }
 export const say = (text, ms) => banner(text, ms)
 
@@ -545,6 +549,9 @@ function pushHud() {
     classmates: S.students.filter((s) => s.on && !s.down).length,
     train: { ...S.train },
     puzzle: PUZZLE.active ? PUZZLE.level : 0,
+    tuition: tuitionStatus(),
+    canTrade: S.tradedWave !== S.wave,
+    compound: S.compound,
     heroes: Object.fromEntries(Object.values(S.heroes).map((h) => [h.id, h.on && !h.down ? Math.max(1, Math.round((h.hp / HEROES[h.id].hp) * 100)) : 0])),
   }
   const cur = chat.get()
@@ -558,8 +565,8 @@ export function resetRivals() {
   for (const s of S.students) s.on = false
   DAN.golden = false
   Object.assign(S, {
-    wave: 0, toSpawn: 0, spawnT: 0, interlude: 1.5, hp: 100, shield: 0, spells: 0, weapon: null, slow: 0, labubuT: 0, thievesLeft: 0, bossDue: 0, bolts: [], train: { gym: 0, boxing: 0, track: 0 }, swanT: 0, swanTick: 0, blasterOwned: false, blasterCharge: 0, blasts: [], puddings: [], seenKinds: new Set(), kills: 0, started: false, fx: [],
-    endowment: START_ENDOWMENT, inv: { briefcase: false, cards: 0, thermos: 1, takeover: 0, crash: 0, gavel: false, cannon: 0, swan: 0, endowment: 0, blaster: 0 }, melee: 'wsj', ranged: 'thermos', cool: { melee: 0, card: 0, sic: 0 }, cards: [], thermoses: [], crash: 0, cleared: false, coffeeT: 0,
+    wave: 0, toSpawn: 0, spawnT: 0, interlude: 1.5, hp: 100, shield: 0, spells: 0, weapon: null, slow: 0, labubuT: 0, thievesLeft: 0, bossDue: 0, bolts: [], train: { gym: 0, boxing: 0, track: 0 }, swanT: 0, swanTick: 0, blasterOwned: false, blasterCharge: 0, blasts: [], puddings: [], owed: 0, installments: 0, tradedWave: -1, compound: 0, seenKinds: new Set(), kills: 0, started: false, fx: [],
+    endowment: START_ENDOWMENT, inv: { briefcase: false, cards: 0, thermos: 1, takeover: 0, crash: 0, gavel: false, cannon: 0, swan: 0, endowment: 0, blaster: 0, lux: 0, raise: 0 }, melee: 'wsj', ranged: 'thermos', cool: { melee: 0, card: 0, sic: 0 }, cards: [], thermoses: [], crash: 0, cleared: false, coffeeT: 0,
   })
   for (const h of Object.values(S.heroes)) h.on = false
   Object.assign(S.dan, { cool: { bark: 0, charge: 0, howl: 0 }, level: 1, target: null, dash: 0 })
@@ -824,6 +831,8 @@ export const RANGED = {
   cannon: { name: 'Money Cannon', icon: '💸', have: () => S.inv.cannon > 0, count: () => S.inv.cannon, use: () => fireCannon() },
   swan: { name: 'Black Swan Event', icon: '🦢', have: () => S.inv.swan > 0, count: () => S.inv.swan, use: () => blackSwan() },
   blaster: { name: 'Ticker Tape Blaster', icon: '📈', have: () => S.blasterOwned && S.inv.blaster >= 1, count: () => (S.blasterOwned ? S.inv.blaster : 0), use: () => fireBlaster() },
+  lux: { name: 'Lux et Veritas', icon: '☀️', have: () => S.inv.lux > 0, count: () => S.inv.lux, use: () => castLux() },
+  raise: { name: 'Raise the Fallen', icon: '⚰️', have: () => S.inv.raise > 0, count: () => S.inv.raise, use: () => raiseFallen() },
   endowment: { name: 'The Endowment', icon: '🏛️', have: () => S.inv.endowment > 0, count: () => S.inv.endowment, use: () => unleashEndowment() },
 }
 export function useRanged() {
@@ -842,7 +851,7 @@ export function wheelOptions() {
   return [
     ...Object.entries(MELEE).map(([id, w]) => ({ id, kind: 'melee', name: w.name, icon: w.icon, count: null, ready: id === 'wsj' || !!S.inv[id], on: S.melee === id })),
     ...Object.entries(RANGED).map(([id, r]) => ({ id, kind: 'ranged', name: r.name, icon: r.icon, count: r.count(), ready: !!r.have(), on: S.ranged === id })),
-  ].filter((o) => (o.id === 'blaster' ? S.blasterOwned : o.ready || !SUPERS[o.id])) // super weapons (and the easter egg) only show up once unlocked
+  ].filter((o) => (o.id === 'blaster' ? S.blasterOwned : o.ready || !(SUPERS[o.id] || SPELLS[o.id]))) // super weapons, spells, and the easter egg only show up once you have them
 }
 export function equip(id) {
   if (MELEE[id]) return equipMelee(id)
@@ -937,6 +946,109 @@ export function train(id) {
   pushHud()
   return true
 }
+// ---------- tuition
+// when the next payment is due: { wave, amount, probation }, or null once it's all paid
+function tuitionStatus() {
+  const next = S.cleared ? S.wave + 1 : Math.max(1, S.wave)
+  if (S.owed > 0) return { wave: next, amount: S.owed, probation: true }
+  if (S.installments >= TUITION.payments) return null
+  return { wave: Math.max(next, (S.installments + 1) * TUITION.every), amount: TUITION_PAYMENT, probation: false, n: S.installments + 1 }
+}
+// on clearing a wave: settle any probation balance, then bill the installment if one is due.
+// Returns false if you're expelled.
+function payTuition() {
+  if (S.owed > 0) {
+    if (S.endowment < S.owed) return false
+    S.endowment -= S.owed
+    banner(`✅ Probation lifted: you paid the $${S.owed.toLocaleString()} tuition balance.`)
+    S.owed = 0
+  }
+  if (S.wave % TUITION.every === 0 && S.installments < TUITION.payments) {
+    S.installments += 1
+    const bill = TUITION_PAYMENT
+    if (S.endowment >= bill) {
+      S.endowment -= bill
+      banner(`🎓 Tuition paid: $${bill.toLocaleString()} (installment ${S.installments} of ${TUITION.payments}).`)
+    } else {
+      // Academic Probation: everything you have goes toward it; half your classmates take a leave of absence
+      const short = bill - S.endowment
+      S.endowment = 0
+      S.owed = Math.round((short * (1 + TUITION.lateFee)) / 100) * 100
+      const active = S.students.filter((q) => q.on && !q.down)
+      active.slice(0, Math.floor(active.length / 2)).forEach((q) => (q.on = false))
+      banner(`⚠️ ACADEMIC PROBATION! You were $${short.toLocaleString()} short on tuition. Half your classmates took a leave of absence, and $${S.owed.toLocaleString()} (with a late fee) is due when you clear the next wave, or you're expelled.`)
+    }
+  }
+  pushHud()
+  return true
+}
+
+// ---------- the Bloomberg Terminal (App.jsx runs the mini-game; the money moves here)
+export const canTrade = () => S.tradedWave !== S.wave
+export function tradeStart(stake) {
+  stake = Math.floor(stake)
+  if (!canTrade() || stake < 100 || stake > S.endowment) return false
+  S.endowment -= stake
+  S.tradedWave = S.wave
+  pushHud()
+  return true
+}
+export function tradeSettle(amount) {
+  S.endowment += Math.round(amount)
+  if (amount > 0) sfx.coin()
+  pushHud()
+}
+
+// ---------- the mysterious book's spells
+export function buySpell(id) {
+  const sp = SPELLS[id]
+  if (!sp || S.endowment < sp.price) return false
+  S.endowment -= sp.price
+  if (id === 'embrace') S.hp = 100
+  else if (id === 'ward') S.shield += 60
+  else if (id === 'compound') S.compound += 5
+  else {
+    S.inv[id] += 1
+    S.ranged = id
+  }
+  sfx.coin()
+  banner(`📖 ${sp.icon} ${sp.name}${sp.now ? '!' : ': ready on your weapon wheel (L / right click).'}`)
+  pushHud()
+  return true
+}
+export function castLux() {
+  if (!canAct() || S.inv.lux <= 0) return
+  S.inv.lux -= 1
+  for (const z of S.zombies) {
+    if (!hostile(z) || dist(z, S.player) > 15) continue
+    z.stun = Math.max(z.stun || 0, z.boss ? 1 : 4)
+    z.flash = 0.6
+  }
+  S.fx.push({ x: S.player.x, z: S.player.z, r: 15, life: 1, max: 1, color: '#fff6c8' })
+  banner('☀️ Lux et Veritas! Harvard is blinded.')
+  sfx.boom()
+  pushHud()
+}
+export function raiseFallen() {
+  if (!canAct() || S.inv.raise <= 0) return
+  S.inv.raise -= 1
+  let n = 0
+  for (const z of S.zombies) {
+    if (!hostile(z) || z.kind !== 'turned' || dist(z, S.player) > 15) continue
+    const seat = S.students.find((q) => !q.on)
+    z.on = false
+    if (LAB.carrier === z) dropLabubu(z)
+    if (seat) {
+      spawnStudent(seat, S.player, true, null)
+      Object.assign(seat, { x: z.x, z: z.z })
+      n++
+    }
+    S.fx.push({ x: z.x, z: z.z, r: 1.4, life: 0.8, max: 0.8, color: '#7dffb0' })
+  }
+  banner(n ? `⚰️ Raise the Fallen: ${n} classmate${n > 1 ? 's' : ''} came back to Yale!` : '⚰️ No turned classmates nearby to raise.')
+  pushHud()
+}
+
 export function startNextWave() {
   if (S.cleared) S.interlude = 0.01
 }
@@ -1638,6 +1750,161 @@ function admitTex() {
   return t
 }
 
+// ---------- Ross Library easter eggs: the Bloomberg Terminal (south nook) and the mysterious book (north nook)
+export const TERMINAL = { x: -30.75, z: 10.45 }
+export const BOOK = { x: -30.75, z: -10.4 }
+function termTex() {
+  const c = document.createElement('canvas')
+  c.width = 512
+  c.height = 320
+  const g = c.getContext('2d')
+  g.fillStyle = '#05060a'
+  g.fillRect(0, 0, 512, 320)
+  g.fillStyle = '#ff9a1a'
+  g.font = 'bold 34px ui-monospace, Menlo, monospace'
+  g.fillText('BLOOMBERG', 16, 42)
+  g.fillStyle = '#1e2a6e'
+  g.fillRect(0, 54, 512, 4)
+  g.font = '24px ui-monospace, Menlo, monospace'
+  ;[['YALE', '+4.21', true], ['SOM', '+9.03', true], ['HRVD', '-12.9', false], ['BOOLA', '+66.6', true], ['CRMSN', '-8.14', false]].forEach(([sym, chg, up], k) => {
+    g.fillStyle = '#ffb347'
+    g.fillText(sym.padEnd(6), 16, 92 + k * 30)
+    g.fillStyle = up ? '#39ff7a' : '#ff3b4a'
+    g.fillText(`${chg}%`, 150, 92 + k * 30)
+  })
+  // a little chart
+  g.strokeStyle = '#39ff7a'
+  g.lineWidth = 3
+  g.beginPath()
+  let y = 250
+  for (let x = 280; x < 500; x += 12) {
+    y += Math.sin(x * 0.07) * 9 - 3
+    x === 280 ? g.moveTo(x, y) : g.lineTo(x, y)
+  }
+  g.stroke()
+  g.fillStyle = '#ff9a1a'
+  g.font = '20px ui-monospace, Menlo, monospace'
+  g.fillText('<GO> TO TRADE', 16, 300)
+  const t = new THREE.CanvasTexture(c)
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+function runeTex() {
+  const c = document.createElement('canvas')
+  c.width = 256
+  c.height = 320
+  const g = c.getContext('2d')
+  g.fillStyle = '#e9e0c4'
+  g.fillRect(0, 0, 256, 320)
+  g.fillStyle = '#1f6b3a'
+  g.font = '28px Georgia, serif'
+  const glyphs = 'ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊᛏᛒᛖᛗᛚᛜᛞᛟ'
+  for (let r = 0; r < 9; r++) {
+    let line = ''
+    for (let k = 0; k < 9; k++) line += glyphs[(r * 7 + k * 3) % glyphs.length]
+    g.fillText(line, 16, 40 + r * 32)
+  }
+  const t = new THREE.CanvasTexture(c)
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+function BloombergTerminal({ innerRef }) {
+  const screen = useMemo(() => new THREE.MeshBasicMaterial({ map: termTex(), toneMapped: false }), [])
+  return (
+    <group ref={innerRef} position={[TERMINAL.x, 0, TERMINAL.z]} rotation={[0, Math.PI, 0]}>
+      {/* an invisible box around it all, so aiming anywhere at the terminal counts */}
+      <mesh position={[0, 0.8, 0]}>
+        <boxGeometry args={[1.5, 1.6, 0.9]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+      <mesh position={[0, 0.74, 0]} castShadow>
+        <boxGeometry args={[1.4, 0.05, 0.7]} />
+        <meshStandardMaterial color="#2a2420" roughness={0.6} />
+      </mesh>
+      {[-0.65, 0.65].map((x) => (
+        <mesh key={x} position={[x, 0.37, 0]}>
+          <boxGeometry args={[0.05, 0.74, 0.62]} />
+          <meshStandardMaterial color="#1c1916" />
+        </mesh>
+      ))}
+      {/* two monitors, angled in */}
+      {[-0.33, 0.33].map((x) => (
+        <group key={x} position={[x, 1.05, -0.12]} rotation={[0, -x * 0.5, 0]}>
+          <mesh>
+            <boxGeometry args={[0.6, 0.4, 0.03]} />
+            <meshStandardMaterial color="#111" roughness={0.4} />
+          </mesh>
+          <mesh position={[0, 0, 0.017]} material={screen}>
+            <planeGeometry args={[0.56, 0.35]} />
+          </mesh>
+          <mesh position={[0, -0.25, -0.02]}>
+            <boxGeometry args={[0.05, 0.12, 0.05]} />
+            <meshStandardMaterial color="#222" />
+          </mesh>
+        </group>
+      ))}
+      {/* the keyboard, with Bloomberg's colored keys */}
+      <mesh position={[0, 0.775, 0.17]} rotation={[-0.08, 0, 0]}>
+        <boxGeometry args={[0.6, 0.025, 0.2]} />
+        <meshStandardMaterial color="#141414" />
+      </mesh>
+      {[
+        [-0.24, '#e8c21a'],
+        [-0.19, '#e8c21a'],
+        [0.2, '#d12a2a'],
+        [0.25, '#2e9e4a'],
+      ].map(([x, c]) => (
+        <mesh key={x} position={[x, 0.79, 0.1]}>
+          <boxGeometry args={[0.04, 0.012, 0.035]} />
+          <meshStandardMaterial color={c} emissive={c} emissiveIntensity={0.4} />
+        </mesh>
+      ))}
+      <pointLight position={[0, 1.3, 0.6]} color="#ffb05a" intensity={3} distance={4} decay={1.5} />
+    </group>
+  )
+}
+function MysteryBook({ innerRef }) {
+  const pages = useMemo(() => new THREE.MeshStandardMaterial({ map: runeTex(), emissive: '#2dff7a', emissiveIntensity: 0.25, side: THREE.DoubleSide }), [])
+  const book = useRef()
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime
+    book.current.position.y = 1.18 + Math.sin(t * 1.6) * 0.04
+    book.current.rotation.y = Math.sin(t * 0.5) * 0.15
+  })
+  return (
+    <group ref={innerRef} position={[BOOK.x, 0, BOOK.z]}>
+      <mesh position={[0, 0.8, 0]}>
+        <boxGeometry args={[0.8, 1.6, 0.8]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+      {/* a stone pedestal */}
+      <mesh position={[0, 0.5, 0]} castShadow>
+        <cylinderGeometry args={[0.18, 0.26, 1, 12]} />
+        <meshStandardMaterial color="#4b4a47" roughness={0.95} />
+      </mesh>
+      <mesh position={[0, 1.02, 0]}>
+        <cylinderGeometry args={[0.3, 0.2, 0.06, 12]} />
+        <meshStandardMaterial color="#4b4a47" roughness={0.95} />
+      </mesh>
+      {/* the book, open, hovering just above it */}
+      <group ref={book} position={[0, 1.18, 0]} rotation={[0, 0, 0]}>
+        {[-1, 1].map((sx) => (
+          <group key={sx} rotation={[-0.35, 0, sx * 0.18]}>
+            <mesh position={[sx * 0.16, 0, 0]}>
+              <boxGeometry args={[0.32, 0.02, 0.42]} />
+              <meshStandardMaterial color="#173a22" roughness={0.6} />
+            </mesh>
+            <mesh position={[sx * 0.155, 0.012, 0]} rotation={[-Math.PI / 2, 0, 0]} material={pages}>
+              <planeGeometry args={[0.29, 0.39]} />
+            </mesh>
+          </group>
+        ))}
+      </group>
+      <pointLight position={[0, 1.6, 0.3]} color="#3dff8a" intensity={4} distance={4} decay={1.5} />
+    </group>
+  )
+}
+
 // the Admissions officer: Yale-blue blazer, lanyard, clipboard, behind a little podium. Turns to face you
 // when you come close, and waves you over now and then.
 function AdmissionsDesk({ innerRef }) {
@@ -1865,6 +2132,8 @@ export default function Rivals() {
   const vending = useRef()
   const coffee = useRef()
   const admissions = useRef()
+  const terminal = useRef()
+  const book = useRef()
   const ray = useMemo(() => new THREE.Raycaster(), [])
   const tex = useMemo(() => ({ paper: paperTex(), red: glowTex('#ff3b3b'), blue: glowTex('#4aa3ff'), crown: emojiTex('👑'), quiz: emojiTex('❓'), gold: glowTex('#ffd76a') }), [])
   const boltMesh = useRef()
@@ -1933,7 +2202,18 @@ export default function Rivals() {
         if (S.wave > 0 && !S.cleared) {
           S.cleared = true
           S.interlude = INTERMISSION
-          if (S.wave >= FINAL_WAVE) {
+          if (S.compound > 0) {
+            const gain = Math.round(S.endowment * 0.08)
+            S.endowment += gain
+            S.compound -= 1
+            banner(`💰 Compound Interest: +$${gain.toLocaleString()}.`)
+          }
+          if (!payTuition()) {
+            // couldn't cover the probation balance: expelled
+            chat.set({ over: { expelled: true, wave: S.wave, kills: S.kills, owed: S.owed }, zombie: null })
+            return
+          }
+          if (S.wave >= FINAL_WAVE && S.owed === 0) {
             // the finale: Evans Hall held for all 50 waves
             sfx.coin()
             chat.set({ over: { won: true, wave: S.wave, kills: S.kills, classmates: classmateCount() }, zombie: null })
@@ -2665,6 +2945,8 @@ export default function Rivals() {
       let hitA = false
       let hitP = false
       let hitPoster = false
+      let hitTerm = false
+      let hitBook = false
       S.aim = null
       if (running && !st.talkingTo) {
         ray.setFromCamera(CENTER, camera)
@@ -2679,12 +2961,30 @@ export default function Rivals() {
         if (h && h.distance <= reach) hitZ = h.instanceId
         else if (!h) {
           ray.far = NOTE_RANGE
-          hitV = ray.intersectObject(vending.current, true).length > 0
-          hitC = !hitV && ray.intersectObject(coffee.current, true).length > 0
-          hitA = !hitV && !hitC && ray.intersectObject(admissions.current, true).length > 0
-          hitP = PUZZLE.active && !hitV && !hitC && !hitA && ray.intersectObject(puzzle.current.children[0], false).length + ray.intersectObject(puzzle.current.children[1], true).length > 0
-          hitPoster = !S.blasterOwned && !hitV && !hitC && !hitA && !hitP && ray.intersectObject(posterHit.current, false).length > 0
-          if (!hitV && !hitC && !hitA && !hitP && !hitPoster) {
+          // everything you can interact with: the nearest one under the crosshair wins (walls don't block
+          // the ray, so the vending machine behind the library wall mustn't beat the terminal in front of you)
+          const near = (obj, deep = true) => ray.intersectObject(obj, deep)[0]?.distance ?? Infinity
+          const cands = [
+            ['v', near(vending.current)],
+            ['c', near(coffee.current)],
+            ['a', near(admissions.current)],
+            ['p', PUZZLE.active ? Math.min(near(puzzle.current.children[0], false), near(puzzle.current.children[1])) : Infinity],
+            ['poster', S.blasterOwned ? Infinity : near(posterHit.current, false)],
+            ['t', near(terminal.current)],
+            ['b', near(book.current)],
+          ]
+          const [best, bd] = cands.reduce((m, c) => (c[1] < m[1] ? c : m), ['', Infinity])
+          if (bd < Infinity) {
+            hitV = best === 'v'
+            hitC = best === 'c'
+            hitA = best === 'a'
+            hitP = best === 'p'
+            hitPoster = best === 'poster'
+            hitTerm = best === 't'
+            hitBook = best === 'b'
+          }
+          const free = bd === Infinity
+          if (free) {
             const nh = ray.intersectObjects(notes.current.filter(Boolean), false)[0]
             if (nh) hitN = nh.object.userData.id
           }
@@ -2697,6 +2997,8 @@ export default function Rivals() {
       if (hitA !== !!st.admissions) chat.set({ admissions: hitA })
       if (hitP !== !!st.puzzleAim) chat.set({ puzzleAim: hitP })
       if (hitPoster !== !!st.posterAim) chat.set({ posterAim: hitPoster })
+      if (hitTerm !== !!st.termAim) chat.set({ termAim: hitTerm })
+      if (hitBook !== !!st.bookAim) chat.set({ bookAim: hitBook })
     }
   })
 
@@ -2774,6 +3076,8 @@ export default function Rivals() {
       <VendingMachine innerRef={vending} />
       <CoffeeTable innerRef={coffee} />
       <AdmissionsDesk innerRef={admissions} />
+      <BloombergTerminal innerRef={terminal} />
+      <MysteryBook innerRef={book} />
     </>
   )
 }
