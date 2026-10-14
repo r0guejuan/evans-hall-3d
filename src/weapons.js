@@ -64,7 +64,7 @@ export const HEROES = {
     name: 'Dean Kerwin Charles',
     short: 'Dean Charles',
     icon: '📊',
-    price: 6000,
+    price: 50000,
     hp: 60,
     punch: 3,
     desc: 'Economic Shock: when zombies crowd him, every 10 seconds a shockwave damages and stuns them all. The hardest hitter in Evans Hall.',
