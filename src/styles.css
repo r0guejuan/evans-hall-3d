@@ -1761,3 +1761,19 @@ body,
   font-size: 15px;
   font-weight: 700;
 }
+
+/* the start card's tuition warning */
+.card .tuitionnote {
+  margin: 10px 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #ffd76a;
+  border-radius: 10px;
+  background: rgba(255, 215, 106, 0.1);
+  color: #ffe9b0;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.card .tuitionnote b {
+  color: #ffd76a;
+}

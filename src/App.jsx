@@ -11,7 +11,7 @@ import ChatWindow from './ChatWindow.jsx'
 import WeaponWheel from './WeaponWheel.jsx'
 import { CHAT_PROFESSORS, chat, useChat } from './chat.js'
 import { COFFEE, DAN_LEVELS, FINAL_WAVE, MESSAGES, buySpell, RANGED, buy, canShop, drinkCoffee, freeSeats, hire, hireHero, meleeAttack, nextTraining, PUZZLE, solvePuzzle, train, unlockBlaster, resetRivals, say, sicEm, startNextWave, useRanged } from './Rivals.jsx'
-import { ADMIT, HEROES, ITEMS, MELEE, POSTER_Y, SHURIKEN, SPELLS, TRAINING } from './weapons.js'
+import { ADMIT, HEROES, ITEMS, MELEE, POSTER_Y, SHURIKEN, SPELLS, TRAINING, TUITION, TUITION_PAYMENT } from './weapons.js'
 import TradeGame from './TradeGame.jsx'
 import { POSTER_TILES } from './textures.js'
 import * as sfx from './sfx.js'
@@ -857,10 +857,14 @@ export default function App() {
           <div className="card">
             <div className="kicker">Yale SOM · Evans Hall · Halloween night</div>
             <h1 className="title">Crimson Tide of the Dead</h1>
+            <p className="tuitionnote">
+              💸 <b>Tuition is due!</b> The program costs <b>${TUITION.total.toLocaleString()}</b>: <b>${TUITION_PAYMENT.toLocaleString()}</b> comes out of
+              your Endowment every {TUITION.every} waves. Spend smart: if you can't pay, you go on academic probation, and if you still can't, you're expelled.
+            </p>
             <p className="rules">
               🧟 Harvard zombies are loose in Evans Hall, in growing waves. Fight with business school gear: kills earn <b>Endowment</b> to spend at the
               Endowment Office between waves, and Handsome Dan fights at your side. ⚡ Answer the professors' questions for <b>power-ups</b> (study notes with the
-              answers are hidden around the building). ☕ Hurt? Grab coffee at the <b>snack table</b> in the south cloister (☕ on the map); 🎓 <b>Admissions</b> is right next to it. Fallen classmates rise as Harvard zombies, so recruit more there. 🏁 Survive <b>{FINAL_WAVE} waves</b>, one for each year of Yale SOM, to win, and pay your <b>tuition</b> ($52,000 every 10 waves). 👑 Every 4th wave brings a <b>boss</b>, and every 3rd hides a 🧩 <b>puzzle</b> that unlocks a super weapon. 😱 Don't let them steal the{' '}
+              answers are hidden around the building). ☕ Hurt? Grab coffee at the <b>snack table</b> in the south cloister (☕ on the map); 🎓 <b>Admissions</b> is right next to it. Fallen classmates rise as Harvard zombies, so recruit more there. 🏁 Survive <b>{FINAL_WAVE} waves</b>, one for each year of Yale SOM, to win. 👑 Every 4th wave brings a <b>boss</b>, and every 3rd hides a 🧩 <b>puzzle</b> that unlocks a super weapon. 😱 Don't let them steal the{' '}
               <b>Labubu</b> off Prof. Zaman in room 2200! Every wave sends thieves after it. If one grabs it, drop the thief, pick up the Labubu, and bring it back to him within 90 seconds or the game is over.
             </p>
             <button className="go">{isTouch ? 'Tap to walk in' : 'Click to walk in'}</button>
