@@ -22,7 +22,7 @@ It's Halloween night (jack-o'-lanterns, cobwebs, bats, hanging ghosts, string li
 Pick one on the start screen (or link straight to it):
 
 - **🎃 Halloween Night** (the default): Crimson Tide of the Dead. Night, fog, lightning, Harvard zombies, jack-o'-lanterns, and a graveyard in the courtyard.
-- **🦃 Thanksgiving Day** (`?theme=thanksgiving`): The Turkey Trot. A sunny fall afternoon, giant Harvard turkeys (tail fans, beaks, wattles, gobbles, each type still in its own outfit), hay bales, pumpkins and gourds, cornstalks, a maple-leaf garland, fallen leaves, autumn trees, and a harvest feast table and a Yale scarecrow in the courtyard.
+- **🦃 Thanksgiving Day** (`?theme=thanksgiving`): The Turkey Trot. A sunny fall afternoon, giant Harvard turkeys (tail fans, beaks, wattles, gobbles, each type still in its own outfit), classmates in fall Yale outfits (game-day sweaters and scarves, varsity jackets, quarter-zips, flannels and Yale caps, puffer vests, peacoats, beanies), hay bales, pumpkins and gourds, cornstalks, a maple-leaf garland, fallen leaves, autumn trees, and a harvest feast table and a Yale scarecrow in the courtyard.
 
 Everything else (waves, tuition, the Deans, the easter eggs) is the same in both. `src/theme.js` picks the level; `src/FallDecor.jsx` is the Thanksgiving decor.
 

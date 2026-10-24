@@ -124,7 +124,7 @@ function rigParts(look) {
       ...(FALL ? turkeyParts() : []),
     )
   } else {
-    parts.push(...costumeParts(L))
+    parts.push(...(FALL ? fallOutfitParts(L) : costumeParts(L))) // Halloween costumes, or Thanksgiving fall outfits
   }
   return parts.map((pt) => ({
     ...pt,
@@ -242,8 +242,82 @@ export const COSTUMES = {
   whiffenpoof: { name: 'Headless Whiffenpoof', shirt: '#101014', pants: '#101014' },
   reaper: { name: 'Grim Reaper of Finals Week', shirt: '#0b0b0e', pants: '#0b0b0e' },
 }
-const COSTUME_IDS = Object.keys(COSTUMES)
+// ---------- Thanksgiving: fall outfits (all Yale), instead of Halloween costumes
+export const FALL_OUTFITS = {
+  gameday: { name: 'Game-day sweater', shirt: '#00356b', pants: '#c8b48a' },
+  varsity: { name: 'Varsity jacket', shirt: '#0f2a52', pants: '#c8b48a' },
+  quarterzip: { name: 'Yale quarter-zip', shirt: '#1b2f5c', pants: '#3b5a85' },
+  flannel: { name: 'Plaid flannel and Yale cap', shirt: '#1d3a6b', pants: '#3b5a85' },
+  puffer: { name: 'Puffer vest over a hoodie', shirt: '#8a8f98', pants: '#3b5a85' },
+  peacoat: { name: 'Peacoat and Yale scarf', shirt: '#14213d', pants: '#55585e' },
+  beanie: { name: 'Yale hoodie and beanie', shirt: '#9aa0a8', pants: '#3b5a85' },
+}
+for (const [id, o] of Object.entries(FALL_OUTFITS)) COSTUMES[id] = o // one lookup for the student tints
+const COSTUME_IDS = Object.keys(FALL ? FALL_OUTFITS : COSTUMES).filter((id) => FALL || !FALL_OUTFITS[id])
 const SHEET = new THREE.CylinderGeometry(0.75, 1, 1, 18)
+function fallOutfitParts(L) {
+  const navy = std('#00356b')
+  const white = std('#f4f2ee')
+  const brass = std('#c9a44a', { metalness: 0.7, roughness: 0.35 })
+  const vest = std('#00356b', { roughness: 0.55 })
+  const seam = std('#0a2347')
+  const only = (c, list) => list.map((pt) => ({ ...pt, only: [c] }))
+  const Y = (x, y, z, k = 1) => [
+    { grp: 'body', g: BOXG, m: white, p: [x, y - 0.04 * k, z], s: [0.022 * k, 0.09 * k, 0.01] },
+    { grp: 'body', g: BOXG, m: white, p: [x - 0.028 * k, y + 0.045 * k, z], r: [0, 0, 0.55], s: [0.022 * k, 0.1 * k, 0.01] },
+    { grp: 'body', g: BOXG, m: white, p: [x + 0.028 * k, y + 0.045 * k, z], r: [0, 0, -0.55], s: [0.022 * k, 0.1 * k, 0.01] },
+  ]
+  // a blue-and-white striped scarf: a wrap at the neck and a tail down the front
+  const scarf = [
+    { grp: 'body', g: CYL, m: navy, p: [0, 1.46, 0], s: [0.105, 0.06, 0.1] },
+    { grp: 'body', g: BOXG, m: navy, p: [0.06, 1.3, 0.14], r: [0, 0, -0.08], s: [0.06, 0.28, 0.015] },
+    ...[1.36, 1.27, 1.18].map((y) => ({ grp: 'body', g: BOXG, m: white, p: [0.061, y, 0.149], r: [0, 0, -0.08], s: [0.062, 0.02, 0.008] })),
+  ]
+  return [
+    ...only('gameday', [...scarf, ...Y(-0.04, 1.22, 0.133)]),
+    // letterman jacket: white sleeves, a big Y patch, a striped collar
+    ...only('varsity', [
+      ...['armL', 'armR'].map((grp) => ({ grp, g: CYL, m: white, p: [0, -0.26, 0], s: [0.061, 0.44, 0.061] })),
+      ...Y(-0.07, 1.27, 0.134, 1.25),
+      { grp: 'body', g: CYL, m: white, p: [0, 1.46, 0], s: [0.098, 0.035, 0.094] },
+      ...[1.38, 1.28, 1.18, 1.08].map((y) => ({ grp: 'body', g: SPH, m: white, p: [0.03, y, 0.134], s: [0.009, 0.009, 0.005] })),
+    ]),
+    // quarter-zip: a white collar and zipper, a small Y on the chest
+    ...only('quarterzip', [
+      { grp: 'body', g: CYL, m: white, p: [0, 1.47, 0], s: [0.1, 0.045, 0.095] },
+      { grp: 'body', g: BOXG, m: white, p: [0, 1.37, 0.133], s: [0.012, 0.14, 0.006] },
+      ...Y(0.07, 1.33, 0.133, 0.6),
+    ]),
+    // plaid flannel and a Yale ball cap
+    ...only('flannel', [
+      ...[1.36, 1.24, 1.12, 1.0].map((y) => ({ grp: 'body', g: BOXG, m: white, p: [0, y, 0.132], s: [0.3, 0.012, 0.006] })),
+      ...[-0.07, 0, 0.07].map((x) => ({ grp: 'body', g: BOXG, m: white, p: [x, 1.18, 0.133], s: [0.012, 0.5, 0.006] })),
+      { grp: 'head', g: SPH, m: navy, p: [0, 0.2, -0.005], s: [0.115, 0.07, 0.12] },
+      { grp: 'head', g: BOXG, m: navy, p: [0, 0.2, 0.12], r: [0.15, 0, 0], s: [0.13, 0.012, 0.08] },
+      { grp: 'head', g: BOXG, m: white, p: [0, 0.235, 0.108], s: [0.03, 0.035, 0.006] },
+    ]),
+    // a quilted Yale-blue puffer vest over a gray hoodie
+    ...only('puffer', [
+      { grp: 'body', g: CYL, m: vest, p: [0, 1.17, 0], s: [0.225, 0.56, 0.155] },
+      ...[1.37, 1.24, 1.11, 0.98].map((y) => ({ grp: 'body', g: CYL, m: seam, p: [0, y, 0], s: [0.228, 0.01, 0.158] })),
+      { grp: 'body', g: BOXG, m: seam, p: [0, 1.17, 0.157], s: [0.01, 0.56, 0.006] },
+      { grp: 'body', g: SPH, m: L.shirt, p: [0, 1.47, -0.1], s: [0.13, 0.08, 0.08], shirt: true }, // the hood
+    ]),
+    // navy peacoat: double-breasted brass buttons, a collar, longer tails, and the striped scarf
+    ...only('peacoat', [
+      ...scarf,
+      ...[1.3, 1.18, 1.06].flatMap((y) => [-1, 1].map((sx) => ({ grp: 'body', g: SPH, m: brass, p: [0.055 * sx, y, 0.134], s: [0.012, 0.012, 0.006] }))),
+      { grp: 'body', g: BOXG, m: L.shirt, p: [0, 0.82, -0.115], s: [0.32, 0.32, 0.03], shirt: true },
+    ]),
+    // gray Yale hoodie and a navy Y beanie with a white pompom
+    ...only('beanie', [
+      ...Y(0, 1.24, 0.133),
+      { grp: 'head', g: SPH, m: navy, p: [0, 0.2, -0.005], s: [0.118, 0.085, 0.122] },
+      { grp: 'head', g: SPH, m: white, p: [0, 0.29, -0.005], s: [0.035, 0.035, 0.035] },
+      { grp: 'body', g: SPH, m: L.shirt, p: [0, 1.47, -0.1], s: [0.13, 0.08, 0.08], shirt: true }, // the hood
+    ]),
+  ]
+}
 const CONE = new THREE.ConeGeometry(1, 1, 14)
 function costumeParts(L) {
   const bone = std('#efeee6')
