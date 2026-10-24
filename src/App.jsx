@@ -233,7 +233,13 @@ export default function App() {
     resume()
   }
 
-  const hud = playing && !talkingTo && !over && !reading && !shopOpen && !admitOpen && !pz && !poster && !trading && !readingBook
+  // any screen that takes the mouse (chat, notes, shops, puzzles, the terminal...). One list, so a new menu
+  // can't forget to hide the "Click to walk in" card, which would sit on top of it and eat its clicks.
+  // long menus focus their bottom button for the keyboard, but must not scroll down to it (that hid the
+  // recruit and buy buttons above the top of the screen)
+  const focusNoScroll = useCallback((el) => el?.focus({ preventScroll: true }), [])
+  const menuOpen = !!(talkingTo || reading || shopOpen || admitOpen || pz || poster || trading || readingBook)
+  const hud = playing && !over && !menuOpen
   useEffect(() => chat.set({ simRunning: hud }), [hud]) // the fight freezes while paused, chatting, reading, or shopping
   useEffect(() => {
     if (!hud) chat.set({ wheelOpen: false })
@@ -568,7 +574,7 @@ export default function App() {
               <button className="go alt" onClick={() => closeShop(false)}>
                 Back to the hall
               </button>
-              <button className="go" onClick={() => closeShop(true)} autoFocus>
+              <button className="go" onClick={() => closeShop(true)} ref={focusNoScroll}>
                 Start the next wave
               </button>
             </div>
@@ -648,7 +654,7 @@ export default function App() {
               })}
             </div>
             <div className="shopfoot">
-              <button className="go" onClick={closeAdmit} autoFocus>
+              <button className="go" onClick={closeAdmit} ref={focusNoScroll}>
                 Back to the fight
               </button>
             </div>
@@ -682,7 +688,7 @@ export default function App() {
               ))}
             </div>
             <div className="shopfoot">
-              <button className="go alt" onClick={closeBook} autoFocus>
+              <button className="go alt" onClick={closeBook} ref={focusNoScroll}>
                 Close the book
               </button>
             </div>
@@ -845,7 +851,7 @@ export default function App() {
         </div>
       )}
 
-      {!playing && !talkingTo && !over && !reading && !shopOpen && (
+      {!playing && !over && !menuOpen && (
         <div
           className="overlay"
           onClick={() => {
