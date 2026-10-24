@@ -18,8 +18,10 @@ import * as sfx from './sfx.js'
 import { NOTES } from './notes.js'
 import { checkAnswer, makePuzzle } from './puzzles.js'
 import { EYE, SPAWN } from './layout.js'
+import { FALL, FOE, TITLE, switchTheme } from './theme.js'
 
-// Crimson Tide of the Dead: Harvard zombies vs. Yale in Evans Hall at night.
+// Crimson Tide of the Dead (Halloween night: Harvard zombies) and The Turkey Trot (Thanksgiving Day: giant
+// Harvard turkeys) vs. Yale in Evans Hall. theme.js picks the level.
 // ?classic in the URL turns off shadows + post-processing (for slow computers).
 const HQ = !new URLSearchParams(location.search).has('classic')
 // phones and tablets get a lighter look: no shadows or ambient occlusion, a lower pixel ratio, and only
@@ -318,9 +320,9 @@ export default function App() {
           <EffectComposer multisampling={0}>
             <Bloom mipmapBlur luminanceThreshold={1.4} luminanceSmoothing={0.2} intensity={1.1} />
             <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
-            <HueSaturation saturation={-0.42} />
-            <BrightnessContrast contrast={0.14} brightness={-0.03} />
-            <Vignette offset={0.18} darkness={0.88} />
+            <HueSaturation saturation={FALL ? 0.08 : -0.42} />
+            <BrightnessContrast contrast={FALL ? 0.06 : 0.14} brightness={FALL ? 0.02 : -0.03} />
+            <Vignette offset={0.18} darkness={FALL ? 0.35 : 0.88} />
           </EffectComposer>
         )}
         {HQ && !PHONE && (
@@ -328,11 +330,11 @@ export default function App() {
             <N8AO halfRes quality="medium" aoRadius={1.4} distanceFalloff={0.6} intensity={3.2} />
             <Bloom mipmapBlur luminanceThreshold={1.4} luminanceSmoothing={0.2} intensity={1.1} />
             <ToneMapping mode={ToneMappingMode.ACES_FILMIC} />
-            <HueSaturation saturation={-0.42} />
-            <BrightnessContrast contrast={0.14} brightness={-0.03} />
+            <HueSaturation saturation={FALL ? 0.08 : -0.42} />
+            <BrightnessContrast contrast={FALL ? 0.06 : 0.14} brightness={FALL ? 0.02 : -0.03} />
             <SMAA />
-            <Noise blendFunction={BlendFunction.SOFT_LIGHT} opacity={0.14} />
-            <Vignette offset={0.18} darkness={0.88} />
+            <Noise blendFunction={BlendFunction.SOFT_LIGHT} opacity={FALL ? 0.04 : 0.14} />
+            <Vignette offset={0.18} darkness={FALL ? 0.35 : 0.88} />
           </EffectComposer>
         )}
       </Canvas>
@@ -351,7 +353,7 @@ export default function App() {
       <div className="rivalshud" aria-label="Fight status">
         <div className="row">
           <span>
-            🧟 Wave <b>{wave || 1}</b>
+            {FALL ? '🦃' : '🧟'} Wave <b>{wave || 1}</b>
             <small> / {FINAL_WAVE}</small>
           </span>
           <span>💀 <b>{kills || 0}</b> down</span>
@@ -470,7 +472,7 @@ export default function App() {
             </button>
             <div className="mstats">
               <span>
-                🧟 <b>{wave || 1}</b>/{FINAL_WAVE}
+                {FALL ? '🦃' : '🧟'} <b>{wave || 1}</b>/{FINAL_WAVE}
               </span>
               <span>💀 <b>{kills || 0}</b></span>
               <span>🎓 <b>{classmates}</b></span>
@@ -588,12 +590,12 @@ export default function App() {
             <div className="kicker">🎓 Yale Admissions · open all night</div>
             <h2>💰 ${endowment.toLocaleString()}</h2>
             <p className="sub">
-              You have <b>{classmates}</b> classmate{classmates === 1 ? '' : 's'} fighting for you. Fallen classmates rise as Harvard zombies, so
+              You have <b>{classmates}</b> classmate{classmates === 1 ? '' : 's'} fighting for you. Fallen classmates rise as Harvard {FOE}, so
               recruit replacements here. New recruits report in at this desk.
             </p>
             <div className="shopgrid">
               {[
-                { n: 1, icon: '🧑‍🎓', name: 'Recruit a classmate', desc: 'One more Yale student in a Halloween costume, ready to hunt Harvard zombies.', price: ADMIT.one },
+                { n: 1, icon: '🧑‍🎓', name: 'Recruit a classmate', desc: `One more Yale student, ready to hunt Harvard ${FOE}.`, price: ADMIT.one },
                 { n: 5, icon: '🎓', name: 'Recruit a study group', desc: 'Five classmates at once, at a group discount.', price: ADMIT.five },
               ].map((it) => (
                 <div key={it.n} className="item">
@@ -808,7 +810,7 @@ export default function App() {
               </div>
               <div>
                 <b>{over.kills}</b>
-                <span>zombies down</span>
+                <span>{FOE} down</span>
               </div>
               <div>
                 <b>{over.classmates}</b>
@@ -826,13 +828,13 @@ export default function App() {
         <div className="overlay boom">
           <div className="card" role="alertdialog" aria-label="Game over">
             <div className="kicker">Game over</div>
-            <h1>{over.expelled ? '📜 Expelled!' : over.labubu ? '😱 Harvard escaped with the Labubu' : '🧟 Harvard took Evans Hall'}</h1>
+            <h1>{over.expelled ? '📜 Expelled!' : over.labubu ? '😱 Harvard escaped with the Labubu' : (FALL ? '🦃 Harvard took Evans Hall' : '🧟 Harvard took Evans Hall')}</h1>
             <p className="sub">
               {over.expelled
                 ? `You couldn't cover the $${over.owed.toLocaleString()} tuition balance, and Yale SOM had to let you go. Maybe go easier on BoolaCoin next time.`
                 : over.labubu
                 ? 'The clock ran out and the Labubu is headed to Cambridge. Prof. Zaman will never be the same.'
-                : 'The zombies got you. Your students and Handsome Dan fought bravely.'}
+                : `The ${FOE} got you. Your students and Handsome Dan fought bravely.`}
             </p>
             <div className="final">
               <div>
@@ -841,7 +843,7 @@ export default function App() {
               </div>
               <div>
                 <b>{over.kills}</b>
-                <span>zombies down</span>
+                <span>{FOE} down</span>
               </div>
             </div>
             <button className="go" onClick={fightAgain} autoFocus>
@@ -861,16 +863,35 @@ export default function App() {
           }}
         >
           <div className="card">
-            <div className="kicker">Yale SOM · Evans Hall · Halloween night</div>
-            <h1 className="title">Crimson Tide of the Dead</h1>
+            <div className="kicker">Yale SOM · Evans Hall · {FALL ? 'Thanksgiving Day' : 'Halloween night'}</div>
+            <h1 className="title">{TITLE}</h1>
+            {/* pick a level (switching reloads with the other theme) */}
+            <div className="levels" role="group" aria-label="Choose a level">
+              {[
+                ['halloween', '🎃 Halloween Night', !FALL],
+                ['thanksgiving', '🦃 Thanksgiving Day', FALL],
+              ].map(([id, label, on]) => (
+                <button
+                  key={id}
+                  className={on ? 'on' : ''}
+                  aria-pressed={on}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (!on) switchTheme(id)
+                  }}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <p className="tuitionnote">
               💸 <b>Tuition is due!</b> The program costs <b>${TUITION.total.toLocaleString()}</b>: <b>${TUITION_PAYMENT.toLocaleString()}</b> comes out of
               your Endowment every {TUITION.every} waves. Spend smart: if you can't pay, you go on academic probation, and if you still can't, you're expelled.
             </p>
             <p className="rules">
-              🧟 Harvard zombies are loose in Evans Hall, in growing waves. Fight with business school gear: kills earn <b>Endowment</b> to spend at the
+              {FALL ? '🦃 Giant Harvard turkeys are strutting through Evans Hall on Thanksgiving Day,' : '🧟 Harvard zombies are loose in Evans Hall,'} in growing waves. Fight with business school gear: kills earn <b>Endowment</b> to spend at the
               Endowment Office between waves, and Handsome Dan fights at your side. ⚡ Answer the professors' questions for <b>power-ups</b> (study notes with the
-              answers are hidden around the building). ☕ Hurt? Grab coffee at the <b>snack table</b> in the south cloister (☕ on the map); 🎓 <b>Admissions</b> is right next to it. Fallen classmates rise as Harvard zombies, so recruit more there. 🏁 Survive <b>{FINAL_WAVE} waves</b>, one for each year of Yale SOM, to win. 👑 Every 4th wave brings a <b>boss</b>, and every 3rd hides a 🧩 <b>puzzle</b> that unlocks a super weapon. 😱 Don't let them steal the{' '}
+              answers are hidden around the building). ☕ Hurt? Grab coffee at the <b>snack table</b> in the south cloister (☕ on the map); 🎓 <b>Admissions</b> is right next to it. Fallen classmates turn into Harvard {FOE}, so recruit more there. 🏁 Survive <b>{FINAL_WAVE} waves</b>, one for each year of Yale SOM, to win. 👑 Every 4th wave brings a <b>boss</b>, and every 3rd hides a 🧩 <b>puzzle</b> that unlocks a super weapon. 😱 Don't let them steal the{' '}
               <b>Labubu</b> off Prof. Zaman in room 2200! Every wave sends thieves after it. If one grabs it, drop the thief, pick up the Labubu, and bring it back to him within 90 seconds or the game is over.
             </p>
             <button className="go">{isTouch ? 'Tap to walk in' : 'Click to walk in'}</button>

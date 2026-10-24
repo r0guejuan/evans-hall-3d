@@ -15,6 +15,8 @@ import { COURSE_KEYS, slideTex } from './slides.js'
 import { PottedPlants, Trees } from './Nature.jsx'
 import Rivals from './Rivals.jsx'
 import Decor from './Decor.jsx'
+import FallDecor from './FallDecor.jsx'
+import { FALL } from './theme.js'
 import Heroes from './Heroes.jsx'
 import * as sfx from './sfx.js'
 import { rng } from './textures.js'
@@ -158,10 +160,11 @@ function useMaterials() {
   }, [])
 }
 
-// ---------- scene setup: night in Evans Hall. Cold moonlight, fog that swallows the far end of the
+// ---------- scene setup. Halloween: night in Evans Hall. Cold moonlight, fog that swallows the far end of the
 // cloister, a black sky, faint reflections, and the ceiling lights mostly dead, sputtering back on now and then.
-const NIGHT = new THREE.Color('#05070c')
-const ENV_LEVEL = 0.12
+// Thanksgiving: a crisp fall afternoon. Blue sky, warm sun, a light haze, every light on.
+const NIGHT = new THREE.Color(FALL ? '#9cc3ea' : '#05070c')
+const ENV_LEVEL = FALL ? 0.85 : 0.12
 
 function Atmosphere({ M }) {
   const { gl, scene } = useThree()
@@ -172,7 +175,7 @@ function Atmosphere({ M }) {
     scene.environment = env
     scene.environmentIntensity = ENV_LEVEL
     scene.background = NIGHT
-    scene.fog = new THREE.FogExp2('#06080d', 0.055)
+    scene.fog = FALL ? new THREE.FogExp2('#d6e2ec', 0.011) : new THREE.FogExp2('#06080d', 0.055)
     let hdr
     let alive = true
     new RGBELoader().load(`${import.meta.env.BASE_URL}hdri/art_studio_1k.hdr`, (t) => {
@@ -197,6 +200,7 @@ function Atmosphere({ M }) {
   const moon = useRef()
   const storm = useRef({ next: 12 + Math.random() * 10, pulses: [], thunder: null, surge: 25 + Math.random() * 20, surgeLeft: 0 })
   useFrame(({ clock }, dt) => {
+    if (FALL) return // daytime: no storm, and the lights just stay on
     const t = clock.elapsedTime
     const st = storm.current
     if (t > st.next) {
@@ -235,17 +239,20 @@ function Atmosphere({ M }) {
     }
   })
 
+  useLayoutEffect(() => {
+    if (FALL) M.lamp.color.setRGB(2.2, 2.15, 2.0) // steady
+  }, [M])
   return (
     <>
-      {/* moonlight from above: casts real shadows (the ceiling doesn't cast, so it reads like light
-          spilling through the building, not a lid) */}
-      <hemisphereLight ref={hemi} args={['#3a4a6a', '#0a0a10', 0.12]} />
-      <ambientLight intensity={0.02} />
+      {/* moonlight (or the afternoon sun) from above: casts real shadows (the ceiling doesn't cast, so it reads
+          like light spilling through the building, not a lid) */}
+      <hemisphereLight ref={hemi} args={FALL ? ['#dcebff', '#8a7650', 0.95] : ['#3a4a6a', '#0a0a10', 0.12]} />
+      <ambientLight intensity={FALL ? 0.25 : 0.02} />
       <directionalLight
         ref={moon}
-        position={[14, 45, 9]}
-        intensity={0.45}
-        color="#8fa6d8"
+        position={FALL ? [-22, 40, 18] : [14, 45, 9]}
+        intensity={FALL ? 2.6 : 0.45}
+        color={FALL ? '#fff0d6' : '#8fa6d8'}
         castShadow
         shadow-mapSize={[4096, 4096]}
         shadow-bias={-0.0004}
@@ -662,7 +669,7 @@ export default function World() {
       <Faculty />
       <HandsomeDan />
       <Rivals />
-      <Decor />
+      {FALL ? <FallDecor /> : <Decor />}
       <Heroes />
       <ShadowFlags M={M} />
     </>

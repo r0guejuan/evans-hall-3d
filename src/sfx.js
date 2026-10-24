@@ -340,3 +340,30 @@ export function surge() {
   o.start(t)
   o.stop(t + 1.5)
 }
+
+// Thanksgiving: a turkey's gobble instead of a zombie's groan (a fast warbling yodel); vol 0..1 by distance
+export function gobble(vol = 0.5) {
+  if (!ctx || muted || vol <= 0.02) return
+  const t = ctx.currentTime
+  const o = ctx.createOscillator()
+  o.type = 'square'
+  const base = 380 + Math.random() * 120
+  o.frequency.setValueAtTime(base, t)
+  // the gobble: a quick wobble in pitch, five or six times
+  const lfo = ctx.createOscillator()
+  const depth = ctx.createGain()
+  lfo.frequency.value = 18 + Math.random() * 6
+  depth.gain.value = base * 0.35
+  lfo.connect(depth).connect(o.frequency)
+  o.frequency.exponentialRampToValueAtTime(base * 0.7, t + 0.5)
+  const bp = ctx.createBiquadFilter()
+  bp.type = 'bandpass'
+  bp.frequency.value = 1200
+  bp.Q.value = 2
+  o.connect(bp)
+  env(bp, 0.12 * vol, 0.02, 0.45)
+  o.start(t)
+  lfo.start(t)
+  o.stop(t + 0.55)
+  lfo.stop(t + 0.55)
+}

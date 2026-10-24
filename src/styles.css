@@ -1777,3 +1777,28 @@ body,
 .card .tuitionnote b {
   color: #ffd76a;
 }
+
+/* the level picker on the start card */
+.card .levels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 10px 0 4px;
+}
+
+.card .levels button {
+  padding: 10px 8px;
+  border: 1px solid #3a3740;
+  border-radius: 10px;
+  background: #121216;
+  color: #e9e6ef;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.card .levels button.on {
+  border-color: #ffd76a;
+  background: rgba(255, 215, 106, 0.14);
+  color: #ffd76a;
+}

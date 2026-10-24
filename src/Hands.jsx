@@ -3,6 +3,7 @@ import { createPortal, useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { chat, useChat } from './chat.js'
 import { RIVALS } from './Rivals.jsx'
+import { FALL } from './theme.js'
 import { MELEE } from './weapons.js'
 
 // First-person hands, parented to the camera so they move with your view. Drawn on top of everything
@@ -231,8 +232,8 @@ export default function Hands() {
           )}
         </Arm>
       </group>
-      {/* the flashlight: just ahead of the hands, so it lights the hall but not your own fists */}
-      <spotLight ref={light} position={[0.12, -0.08, -0.62]} angle={0.45} penumbra={0.65} distance={30} decay={1.5} color="#e8f0ff" intensity={10} />
+      {/* the flashlight: just ahead of the hands, so it lights the hall but not your own fists (off in daytime) */}
+      <spotLight ref={light} visible={!FALL} position={[0.12, -0.08, -0.62]} angle={0.45} penumbra={0.65} distance={30} decay={1.5} color="#e8f0ff" intensity={10} />
       <primitive object={target} />
     </group>,
     camera,

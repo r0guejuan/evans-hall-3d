@@ -3,6 +3,7 @@ import { useLoader } from '@react-three/fiber'
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { FALL } from './theme.js'
 import { rng } from './textures.js'
 
 // Greenery: procedural trees (tapered trunk, branches, clumps of leaf cards) and the
@@ -16,7 +17,10 @@ function leafTex() {
   c.height = S
   const g = c.getContext('2d')
   const r = rng(31)
-  const greens = ['#2f5a26', '#3d6b2f', '#4f7d38', '#5f8d40', '#3a6330', '#6a9a45']
+  // New England in late November: reds, oranges, golds, a few hold-out greens
+  const greens = FALL
+    ? ['#b8321f', '#d4561c', '#e07b1a', '#e8a21e', '#c9881a', '#a8291c', '#f0b83a', '#7d8a2e']
+    : ['#2f5a26', '#3d6b2f', '#4f7d38', '#5f8d40', '#3a6330', '#6a9a45']
   for (let i = 0; i < 420; i++) {
     // denser toward the middle so each card reads as a rounded clump, not a square
     const a = r() * Math.PI * 2
@@ -132,7 +136,9 @@ function TreeBatch({ variant, items, seed }) {
       m.compose(new THREE.Vector3(it.x, it.y, it.z), q, new THREE.Vector3(w, it.h, w))
       wood.current.setMatrixAt(i, m)
       leaves.current.setMatrixAt(i, m)
-      tint.setHSL(0.27 + (r() - 0.5) * 0.05, 0.25 + r() * 0.2, 0.5 + r() * 0.15) // each canopy a slightly different green
+      // each canopy a slightly different green (or, in the fall, its own warm shade, some redder, some golder)
+      if (FALL) tint.setHSL(0.03 + r() * 0.09, 0.35 + r() * 0.3, 0.72 + r() * 0.12)
+      else tint.setHSL(0.27 + (r() - 0.5) * 0.05, 0.25 + r() * 0.2, 0.5 + r() * 0.15)
       leaves.current.setColorAt(i, tint)
     })
     for (const mesh of [wood.current, leaves.current]) {

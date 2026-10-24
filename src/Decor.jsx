@@ -10,7 +10,7 @@ import { RING } from './nav.js'
 // out in the courtyard. Everything repeated is instanced.
 
 // evenly spaced spots around the cloister loop, `off` meters sideways (+ = toward the outer wall)
-function loopSpots(spacing, off, start = 0) {
+export function loopSpots(spacing, off, start = 0) {
   const out = []
   let acc = start
   for (let i = 0; i < RING.length; i++) {
@@ -37,7 +37,7 @@ function loopSpots(spacing, off, start = 0) {
   return out
 }
 // keep clear of walls and furniture
-const free = (x, z, r = 0.45) =>
+export const free = (x, z, r = 0.45) =>
   !COLLIDERS.some((w) => {
     const rr = r + w.t / 2
     if (x < w.minx - rr || x > w.maxx + rr || z < w.minz - rr || z > w.maxz + rr) return false
@@ -217,7 +217,7 @@ function signLayout() {
   return { walls, backs, fill, garland }
 }
 
-function BalloonSOM() {
+export function BalloonSOM() {
   // against the curved wall of room 2200, facing the corner of the cloister where everyone walks by
   const d = DRUMS.find((q) => q.id === '2200')
   const th = Math.PI / 6

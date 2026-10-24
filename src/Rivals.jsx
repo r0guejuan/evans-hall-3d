@@ -10,6 +10,7 @@ import Labubu from './Labubu.jsx'
 import { NOTES } from './notes.js'
 import { ADMIT, BLASTER, CANNON, CRASH, HEROES, SPELLS, TUITION, TUITION_PAYMENT, ITEMS, MELEE, PUZZLE_EVERY, SHURIKEN, SUPERS, SWAN, TAKEOVER, THERMOS, TRAINING, TRAIN_EVERY, bounty } from './weapons.js'
 import * as sfx from './sfx.js'
+import { FALL, FOE, FOE1 } from './theme.js'
 
 // Rivals: the game. It's night in Evans Hall and Harvard zombies (crimson sweaters, white H) shamble through
 // the cloister in waves that grow bigger and tougher. Yale students in Halloween costumes roam the halls
@@ -120,6 +121,7 @@ function rigParts(look) {
       { grp: 'body', g: BOXG, m: L.white, p: [0, 1.26, 0.133], s: [0.09, 0.022, 0.01], hideFor: noH },
       { grp: 'head', g: BOXG, m: L.dark, p: [0, 0.07, 0.105], s: [0.05, 0.014, 0.01] },
       ...harvardParts(L),
+      ...(FALL ? turkeyParts() : []),
     )
   } else {
     parts.push(...costumeParts(L))
@@ -147,8 +149,8 @@ const KIND_INTRO = {
   sprinter: '🏃 Crimson Sprinters! Harvard track: fast, but they go down easy.',
   chef: '🍮 Hasty Pudding Chefs lob puddings from range. Close the distance!',
   bruiser: '💪 Final Club Bruisers: huge, slow, hit hard, and barely budge.',
-  mimic: '🎭 Labubu thieves disguise themselves as Yale students. Watch for the glowing green faces!',
-  turned: '🧟 A fallen classmate rose as a Harvard zombie! Keep your classmates alive (Dean Tsung can save the fallen).',
+  mimic: FALL ? '🎭 Labubu thieves disguise themselves as Yale students. Look for the turkey head poking out of the sweater!' : '🎭 Labubu thieves disguise themselves as Yale students. Watch for the glowing green faces!',
+  turned: FALL ? '🦃 A fallen classmate turned into a Harvard turkey! Keep your classmates alive (Dean Tsung can save the fallen).' : '🧟 A fallen classmate rose as a Harvard zombie! Keep your classmates alive (Dean Tsung can save the fallen).',
 }
 function pickKind(wave) {
   let r = Math.random()
@@ -158,6 +160,24 @@ function pickKind(wave) {
   }
   return 'freshman'
 }
+// Thanksgiving: every Harvard enemy is a giant turkey. A fan of tail feathers (brown, Harvard crimson, gold)
+// on its back, a beak and a red wattle (each type still wears its own outfit on top)
+const CONEG = new THREE.ConeGeometry(1, 1, 8)
+function turkeyParts() {
+  const cols = ['#6b3a1e', '#a51c30', '#8a5a2a', '#c9a44a', '#6b3a1e', '#a51c30', '#8a5a2a', '#c9a44a', '#6b3a1e']
+  const fan = cols.map((c, k) => {
+    const a = ((k - (cols.length - 1) / 2) / ((cols.length - 1) / 2)) * 1.25 // -72°..72°
+    return { grp: 'body', g: SPH, m: std(c, { roughness: 0.7 }), p: [Math.sin(a) * 0.28, 1.2 + Math.cos(a) * 0.28, -0.2], r: [0.25, 0, -a], s: [0.075, 0.3, 0.015] }
+  })
+  return [
+    ...fan,
+    { grp: 'body', g: SPH, m: std('#5a3018', { roughness: 0.8 }), p: [0, 1.15, -0.14], s: [0.17, 0.2, 0.08] }, // feathered rump under the fan
+    { grp: 'head', g: CONEG, m: std('#e8b830', { roughness: 0.5 }), p: [0, 0.12, 0.13], r: [Math.PI / 2, 0, 0], s: [0.03, 0.07, 0.025] }, // beak
+    { grp: 'head', g: SPH, m: std('#c81e2a', { roughness: 0.6 }), p: [0.012, 0.06, 0.108], s: [0.022, 0.055, 0.018] }, // wattle
+    { grp: 'head', g: SPH, m: std('#c81e2a', { roughness: 0.6 }), p: [0, 0.2, 0.095], s: [0.015, 0.03, 0.015] }, // the little snood on top
+  ]
+}
+
 // costume parts for the Harvard types (shown only for that type)
 function harvardParts(L) {
   const white = std('#f4f2ee')
@@ -362,7 +382,9 @@ function costumeParts(L) {
   ]
 }
 
-const ZOMBIE = rigParts({ skin: '#8fa37a', shirt: '#ffffff', pants: '#ffffff', hair: '#2b2620', eye: '#e6f04a', eyeGlow: true, shoe: '#2a2622', letter: 'H' })
+const ZOMBIE = rigParts({
+  // Halloween: zombie green, glowing eyes. Thanksgiving: a turkey's reddish bald head and plain dark eyes
+  skin: FALL ? '#c9705a' : '#8fa37a', shirt: '#ffffff', pants: '#ffffff', hair: FALL ? '#c9705a' : '#2b2620', eye: FALL ? '#111111' : '#e6f04a', eyeGlow: !FALL, shoe: '#2a2622', letter: 'H' })
 const STUDENT = rigParts({ skin: '#ffffff', shirt: '#ffffff', pants: '#ffffff', hair: '#ffffff', eye: '#16100c', shoe: '#e9e6e0', letter: 'Y' }) // white bases: tinted per costume
 const SKIN_TONES = ['#f1c9a9', '#d9a97e', '#b98260', '#8d5b3e', '#5e3a26', '#e8b896'].map((c) => new THREE.Color(c))
 const HAIR_TONES = ['#1a1412', '#3b2a1e', '#6e4a2c', '#b08a52', '#2a2a2a', '#c45a2a'].map((c) => new THREE.Color(c))
@@ -774,14 +796,14 @@ export function solvePuzzle() {
 export function hostileTakeover() {
   if (!canAct() || S.inv.takeover <= 0) return
   const z = S.aim && S.zombies[S.aim.i]
-  if (!z || !hostile(z) || S.aim.d > TAKEOVER.range) return banner('🤝 Aim at a zombie (within 16 m) to stage a Hostile Takeover.', 2200)
+  if (!z || !hostile(z) || S.aim.d > TAKEOVER.range) return banner(`🤝 Aim at a ${FOE1} (within 16 m) to stage a Hostile Takeover.`)
   if (z.boss) return banner(`👑 ${z.boss.name} is too powerful for a takeover.`, 2200)
   S.inv.takeover -= 1
   act('takeover')
   z.ally = TAKEOVER.time
   z.hp = Math.max(z.hp, 6)
   if (LAB.carrier === z) dropLabubu(z)
-  else banner('🤝 Hostile Takeover! That zombie fights for Yale now.', 2200)
+  else banner(`🤝 Hostile Takeover! That ${FOE1} fights for Yale now.`)
   z.thief = null
   S.fx.push({ x: z.x, z: z.z, r: 1.6, life: 0.6, max: 0.6, color: '#4aa3ff' })
   pushHud()
@@ -1205,7 +1227,7 @@ function spawnZombie(p, thief, { boss = 0, at = null, kind: forced = null } = {}
   const kind = forced || (thief ? 'mimic' : boss ? 'freshman' : pickKind(S.wave))
   const K = KINDS[kind]
   const hp = boss ? Math.round(70 * boss ** 1.35 + S.wave * 4) : (4 + S.wave * 0.6) * K.hp
-  Object.assign(z, { on: true, x: at.x, z: at.z, y: 0, yaw: 0, hp, maxHp: hp, down: false, downT: 0, moving: true, attacking: false, flash: 0, stun: 0, burn: 0, retarget: 0, target: null, thief: null, boss: null, kind, costume: kind, scale: K.scale || 1, throwT: 1 + Math.random() * 2, stalker: Math.random() < STALKER_SHARE, age: 0, ...navInit() })
+  Object.assign(z, { on: true, x: at.x, z: at.z, y: 0, yaw: 0, hp, maxHp: hp, down: false, downT: 0, moving: true, attacking: false, flash: 0, stun: 0, burn: 0, retarget: 0, target: null, thief: null, boss: null, kind, costume: kind, scale: (K.scale || 1) * (FALL ? 1.15 : 1), throwT: 1 + Math.random() * 2, stalker: Math.random() < STALKER_SHARE, age: 0, ...navInit() })
   tintZombie(S.zombies.indexOf(z), kind)
   if (KIND_INTRO[kind] && !S.seenKinds.has(kind)) {
     S.seenKinds.add(kind)
@@ -1221,7 +1243,7 @@ function spawnZombie(p, thief, { boss = 0, at = null, kind: forced = null } = {}
   }
   if (thief) {
     z.thief = { path: null, i: 0 }
-    if (LAB.state === 'home') banner('🧟 A Labubu thief is heading for room 2200! Stop it before it reaches Prof. Zaman!', 3000)
+    if (LAB.state === 'home') banner(`${FALL ? '🦃' : '🧟'} A Labubu thief is heading for room 2200! Stop it before it reaches Prof. Zaman!`)
   }
   return true
 }
@@ -1474,7 +1496,7 @@ function turnClassmate(s) {
   const first = !S.seenKinds.has('turned')
   if (!z || !spawnZombie(S.player || s, false, { at: { x: s.x, z: s.z }, kind: 'turned' })) return
   Object.assign(z, { stun: 1.2, yaw: s.yaw }) // a stagger as they rise
-  if (!first && performance.now() > turnBannerT) banner('🧟 A classmate turned!', 1600)
+  if (!first && performance.now() > turnBannerT) banner(FALL ? '🦃 A classmate turned into a turkey!' : '🧟 A classmate turned!')
   turnBannerT = performance.now() + 6000
 }
 
@@ -2231,7 +2253,7 @@ export default function Rivals() {
           S.bossDue = S.wave % BOSS_EVERY === 0 ? S.wave / BOSS_EVERY : 0
           if (S.wave % PUZZLE_EVERY === 0) placePuzzle(Math.max(PUZZLE.active ? PUZZLE.level : 0, S.wave / PUZZLE_EVERY))
           chat.set({ wave: S.wave })
-          banner(S.wave === 1 ? '🧟 Harvard zombies are in the cloister! Defend Evans Hall!' : `🧟 Wave ${S.wave}: Harvard sends ${S.toSpawn} more`)
+          banner(S.wave === 1 ? (FALL ? '🦃 Giant Harvard turkeys are strutting through the cloister! Defend Evans Hall!' : '🧟 Harvard zombies are in the cloister! Defend Evans Hall!') : `${FALL ? '🦃' : '🧟'} Wave ${S.wave}: Harvard sends ${S.toSpawn} more ${FOE}`)
         }
       }
       if (S.toSpawn > 0) {
@@ -2730,7 +2752,7 @@ export default function Rivals() {
       if (S.groanT <= 0) {
         S.groanT = 2 + Math.random() * 4
         const near = Math.min(99, ...live.map((z) => dist(z, p)))
-        sfx.groan(Math.max(0, 1 - near / 28))
+        ;(FALL ? sfx.gobble : sfx.groan)(Math.max(0, 1 - near / 28))
       }
       if (S.hp < 40) {
         S.beatT -= dt
